@@ -1,3 +1,10 @@
+# large stuff, haven't look at the license
+gitig/*
+
+#testing files and drafts
+gitig_*
+
+##directly copied from en-dash/disease-normalization
 # Large blobs
 data/embeddings
 data/ncbi-disease/
