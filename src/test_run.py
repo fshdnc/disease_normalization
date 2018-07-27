@@ -12,19 +12,12 @@ add the converted objects into a list 'NCBI_abstracts'
 
 NCBI_abstracts = []
 
-for dict_abstract in parse_NCBI_corpus.parse_NCBI_disease_corpus("truncated_NCBI.txt"):
-#trying to print just disease mention in a not brutal way
-#ended up doing it the brutal way
-#maybe change to self-defined class object?
-        #print('dictionary:')
-        #print(dict_abstract)
+for dict_abstract in parse_NCBI_corpus.parse_NCBI_disease_corpus("gitig_truncated_NCBI.txt"):
         #convert dictionary to json, then from json to python object
-        print('converting dictionary to python object:')
         converted_object = json2obj.json2obj(json.dumps(dict_abstract))
-        #print(converted_object)
-        print(converted_object.sections)
-        print('\n')
+        NCBI_abstracts.append(converted_object)
 
+'''sanity check
         print('mentions in a section:')
         cache_pot = []
         for piece_of_text in converted_object.sections:
@@ -52,9 +45,9 @@ for dict_abstract in parse_NCBI_corpus.parse_NCBI_disease_corpus("truncated_NCBI
                 print('\n')
         assert cache_pot == cache_dict
         print('\n\n')
-
+'''
+print(NCBI_abstracts)
 
 #the details of the resulting objects, how to use them?
-### too much problem, try parsing into an object some other way
 
 
