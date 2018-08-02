@@ -40,3 +40,4 @@ def parse_MEDIC_dictionary(filename):
 				yield DiseaseID, entry
 
 #dunno what will happend if no altID or syn
+#some AllNames tuples have comma at the end but does not seem to affect the functionality
