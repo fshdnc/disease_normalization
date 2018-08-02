@@ -5,7 +5,16 @@ import parse_NCBI_corpus
 import json2obj
 import json
 
-def load_NCBI_discorp(filename):
+def load(filename,type):
+        '''type: 'NCBI' or 'MEDIC'
+        '''
+        if type=='NCBI':
+                return _load_NCBI_discorp(filename)
+        elif type=='MEDIC':
+                return _load_MEDIC(filename)
+
+
+def _load_NCBI_discorp(filename):
         '''converting dictionary object from parse_NCBI_disease_corpus generator to python objects
            add the converted objects into a list 'NCBI_abstracts'
 
@@ -60,16 +69,16 @@ def load_NCBI_discorp(filename):
 #from gitig_MEDIC.py
 import parse_MEDIC_dictionary
 
-def load_MEDIC(filename):
+def _load_MEDIC(filename):
 
         '''MEDIC terms from generator to tuples (saves memory)
            saved in a dictionary (DiseaseID as key)'''
 
-        MEDIC_list = {}
+        MEDIC_dict = {}
 
         for DiseaseID, entry in parse_MEDIC_dictionary.parse_MEDIC_dictionary('gitig_truncated_CTD_diseases.tsv'):
                 print(entry)
                 print('\n')
-                assert DiseaseID not in MEDIC_list.keys()
-                MEDIC_list[DiseaseID] = entry
-        return MEDIC_list
+                assert DiseaseID not in MEDIC_dict.keys()
+                MEDIC_dict[DiseaseID] = entry
+        return MEDIC_dict
