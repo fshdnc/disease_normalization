@@ -11,27 +11,28 @@ import nltk
 #gensim for reading in embedding model
 vector_model = KeyedVectors.load_word2vec_format('~/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin', binary = True, limit = 50000)
 
-#sort based on the index to make sure that they are in the correct order
+##sort based on the index to make sure that they are in the correct order
 words = [k for k,v in sorted(vector_model.vocab.items(),key = lambda x:x[1].index)]
-print('Words from embedding model:',len(words))
-print('First 50 words:',words[:50])
+#print('Words from embedding model:',len(words))
+#print('First 50 words:',words[:50])
 
-#Normalize the vectors
-print('Before normalization:',vector_model.get_vector('in')[:10])
+##Normalize the vectors
+#print('Before normalization:',vector_model.get_vector('in')[:10])
 vector_model.init_sims(replace = True)
-print('After normalization:',vector_model.get_vector('in')[:10])
+#print('After normalization:',vector_model.get_vector('in')[:10])
 
 # Build vocabulary mappings
 vocabulary={"<SPECIAL>": 0, "<OOV>": 1} # zero has a special meaning in sequence models, prevent using it for a normal word
 for word in words:
     vocabulary.setdefault(word, len(vocabulary))
-print("Words in vocabulary:",len(vocabulary))
+
+#print("Words in vocabulary:",len(vocabulary))
 inversed_vocabulary={value:key for key, value in vocabulary.items()} # inverse the dictionary
 
 def load_pretrained_word_embeddings(vocab,embedding_model):
     """vocab: vocabulary from data vectorizer
        embedding_model: model loaded with gensim"""
-    pretrained_embeddings=numpy.random.uniform(low=-0.05, high=0.05, size=(len(vocab)-1,embedding_model.vectors.shape[1]))
+    pretrained_embeddings = numpy.random.uniform(low=-0.05, high=0.05, size=(len(vocab)-1,embedding_model.vectors.shape[1]))
     pretrained_embeddings = numpy.vstack((numpy.zeros(shape=(1,embedding_model.vectors.shape[1])), pretrained_embeddings))
     found=0
     for word,idx in vocab.items():
@@ -42,37 +43,6 @@ def load_pretrained_word_embeddings(vocab,embedding_model):
     return pretrained_embeddings
 
 pretrained=load_pretrained_word_embeddings(vocabulary, vector_model)
-
-"""
-#vectorizing data
-import numpy
-def vectorizer(vocab, texts, label_map, labels):
-    vectorized_data = [] # turn text into numbers based on our vocabulary mapping
-    vectorized_labels = [] # same thing for the labels
-    sentence_lengths = [] # Number of tokens in each sentence
-    
-    for i, one_example in enumerate(texts):
-        vectorized_example = []
-        vectorized_example_labels = []
-        for word in one_example:
-            vectorized_example.append(vocab.get(word, 1)) # 1 is our index for out-of-vocabulary tokens
-        
-        for label in labels[i]:
-            vectorized_example_labels.append(label_map[label])
-
-        vectorized_data.append(vectorized_example)
-        vectorized_labels.append(vectorized_example_labels)
-        
-        sentence_lengths.append(len(one_example))
-        
-    vectorized_data = numpy.array(vectorized_data) # turn python list into numpy matrix
-    vectorized_labels = numpy.array(vectorized_labels)
-    
-    return vectorized_data, vectorized_labels, sentence_lengths
-
-vectorized_data, vectorized_labels, lengths=vectorizer(vocabulary, texts, label_map, labels)
-validation_vectorized_data, validation_vectorized_labels, validation_lengths=vectorizer(vocabulary, validation_texts, label_map, validation_labels)
-"""
 
 #word embeddings
 ''' NOT FINISHED
@@ -86,6 +56,8 @@ def vectorizer(word,emb):
 
 
 ## vectorization
+
+
 ##test NCBI corpus, the mentions are not separated by abstract
 #list of objects
 corpus_objects = test_run.load('gitig_truncated_NCBI.txt','NCBI')
@@ -98,7 +70,7 @@ def NCBI_vectorizer(corpus_mentions):
     input: list of mentions
     returns: 2D numpy array of lowercased, tokenized, vectorized mentions
     1. lowercase the mentions
-    2. tokenize the mentions
+    2. tokenize the mentions (using nltk for now because of NER example)
     3. vectorize the mentions
     4. turn the list into numpy array
     """
@@ -115,19 +87,37 @@ print("Old shape:", corpus_vectorized_numpy.shape)
 corpus_vectorized_padded = pad_sequences(corpus_vectorized_numpy, padding='post')
 print("New shape:", corpus_vectorized_padded.shape)
 
+
 #test MEDIC dictionary
 dictionary = test_run.load('gitig_truncated_CTD_diseases.tsv','MEDIC')
-'''construct a new dictionary
-   key: canonical ID
-   value: list of list of vectorized disease name
-   e.g. original_dictionary[id].AllNames: ('1p36.33 deletion', 'Deletion 1p36.33')
-        vectorized_dictionary[id]: [[1, 1445], [1445, 1]]
+
+def vectorize_MEDIC_dict(MEDIC_dict,tokenizer):
+    '''construct a new dictionary
+       key: canonical ID
+       value: list of list of vectorized disease name
+       e.g. original_dictionary[id].AllNames: ('1p36.33 deletion', 'Deletion 1p36.33')
+            vectorized_dictionary[id]: [[1, 1445], [1445, 1]]
+    '''
+    dictionary_vectorized = {}
+    if tokenizer == 'nltk':
+        for i,j in dictionary.items():
+            AllNames_tokenized = [nltk.word_tokenize(i.lower()) for i in j.AllNames]
+            AllNames_vectorized = [[vocabulary.get(token,1) for token in name] for name in AllNames_tokenized]
+            dictionary_vectorized[i] = AllNames_vectorized
+    else:
+        print('Tokenizer not recognized.')
+    return dictionary_vectorized
+
+dictionary_vectorized = vectorize_MEDIC_dict(dictionary,'nltk')
+
 '''
-dictionary_vectorized = {}
-for i,j in dictionary.items():
-    AllNames_tokenized = [nltk.word_tokenize(i.lower()) for i in j.AllNames]
-    AllNames_vectorized = [[vocabulary.get(token,1) for token in name] for name in AllNames_tokenized]
-    dictionary_vectorized[i] = AllNames_vectorized
+#Visual check of vectorization result of MEDIC
+#prints all dict items
+for entry in dictionary_vectorized.keys():
+    print('mention:',dictionary[entry].AllNames)
+    print('vectorized mention:',dictionary_vectorized[entry])
+    print('\n')
+'''
 
 
 #have a draft first
@@ -139,12 +129,19 @@ for i,j in dictionary.items():
 """Things to note
 gensim KeyedVectors objects have not been learned
 
-biomedical domain tokenizer paper to be read
+embedding: try Chiu et al. cambridgeltl
+w2v, phrase2vec
 
 vectorization, last resort
 lowercase
-tokenize
+tokenize: try different tokenizers (note that tokenizer should correspond to that used for word embedding)
 if not found in dic, search for all in uppercases as well
 
 masking? refer to pos with features
 """
+
+#candidate generation
+for mention in corpus_vectorized_numpy:
+    for token in mention:
+        #print(token,inversed_vocabulary[token],KeyedVectors.word_vec(vector_model,inversed_vocabulary[token]))
+        
