@@ -65,21 +65,28 @@ corpus_objects = test_run.load('gitig_truncated_NCBI.txt','NCBI')
 #each mention has a docid and a sections, which contains title and abstract
 corpus_mentions = [mention.text for obj in corpus_objects for part in obj.sections for mention in part.mentions]
 
-def NCBI_vectorizer(corpus_mentions):
+def tok(text,tokenizer):
+    if tokenizer == 'nltk':
+        return nltk.word_tokenize(text)
+    else:
+        raise ValueError('Tokenizer not found!')
+
+def NCBI_tokenizer_and_vectorizer(corpus_mentions,tokenizer):
     """
-    input: list of mentions
-    returns: 2D numpy array of lowercased, tokenized, vectorized mentions
+    input: list of mentions, name of tokenizer
+    returns:1. list of tokenized mentions
+            2. 2D numpy array of lowercased, tokenized, vectorized mentions
     1. lowercase the mentions
     2. tokenize the mentions (using nltk for now because of NER example)
     3. vectorize the mentions
     4. turn the list into numpy array
     """
-    corpus_lowercased_mentions = [text.lower() for text in corpus_mentions]
-    corpus_tokenized_mentions = [nltk.word_tokenize(text) for text in corpus_lowercased_mentions]
+    corpus_tokenized_mentions = [tok(text.lower(),tokenizer) for text in corpus_mentions]
     corpus_vectorized_mentions = [[vocabulary.get(text,1) for text in mention] for mention in corpus_tokenized_mentions]
-    return numpy.array(corpus_vectorized_mentions)
+    corpus_vectorized_numpy = numpy.array(corpus_vectorized_mentions)
+    return corpus_tokenized_mentions, corpus_vectorized_numpy
 
-corpus_vectorized_numpy = NCBI_vectorizer(corpus_mentions)
+corpus_tokenized_mentions, corpus_vectorized_numpy= NCBI_tokenizer_and_vectorizer(corpus_mentions,'nltk')
 
 ##padding
 from keras.preprocessing.sequence import pad_sequences
@@ -91,42 +98,45 @@ print("New shape:", corpus_vectorized_padded.shape)
 #test MEDIC dictionary
 dictionary = test_run.load('gitig_truncated_CTD_diseases.tsv','MEDIC')
 
-def vectorize_MEDIC_dict(MEDIC_dict,tokenizer):
+def MEDIC_dict_tokenizer_and_vectorizer(MEDIC_dict,tokenizer):
     '''construct a new dictionary
        key: canonical ID
        value: list of list of vectorized disease name
        e.g. original_dictionary[id].AllNames: ('1p36.33 deletion', 'Deletion 1p36.33')
+            tokenized_dictionary[id]: [['1p36.33', 'deletion'], ['deletion', '1p36.33']]
             vectorized_dictionary[id]: [[1, 1445], [1445, 1]]
     '''
+    dictionary_tokenized={}
     dictionary_vectorized = {}
-    if tokenizer == 'nltk':
-        for i,j in dictionary.items():
-            AllNames_tokenized = [nltk.word_tokenize(i.lower()) for i in j.AllNames]
-            AllNames_vectorized = [[vocabulary.get(token,1) for token in name] for name in AllNames_tokenized]
-            dictionary_vectorized[i] = AllNames_vectorized
-    else:
-        print('Tokenizer not recognized.')
-    return dictionary_vectorized
+    for i,j in dictionary.items():
+        AllNames_tokenized = [tok(i.lower(),'nltk') for i in j.AllNames]
+        dictionary_tokenized[i] = AllNames_tokenized
+        AllNames_vectorized = [[vocabulary.get(token,1) for token in name] for name in AllNames_tokenized]
+        dictionary_vectorized[i] = AllNames_vectorized
+    return dictionary_tokenized, dictionary_vectorized
 
-dictionary_vectorized = vectorize_MEDIC_dict(dictionary,'nltk')
+dictionary_tokenized, dictionary_vectorized = MEDIC_dict_tokenizer_and_vectorizer(dictionary,'nltk')
 
 '''
 #Visual check of vectorization result of MEDIC
 #prints all dict items
 for entry in dictionary_vectorized.keys():
     print('mention:',dictionary[entry].AllNames)
+    print('tokenized mention',dictionary_tokenized[entry])
     print('vectorized mention:',dictionary_vectorized[entry])
     print('\n')
 '''
 
 
-#have a draft first
-#go over the theory
 
-#what do we put into the system: vector(string, all correct predictions)
-#how do we train
 
 """Things to note
+have a draft first
+go over the theory
+
+what do we put into the system: vector(string, all correct predictions)
+how do we train
+
 gensim KeyedVectors objects have not been learned
 
 embedding: try Chiu et al. cambridgeltl
@@ -139,9 +149,3 @@ if not found in dic, search for all in uppercases as well
 
 masking? refer to pos with features
 """
-
-#candidate generation
-for mention in corpus_vectorized_numpy:
-    for token in mention:
-        #print(token,inversed_vocabulary[token],KeyedVectors.word_vec(vector_model,inversed_vocabulary[token]))
-        
