@@ -59,7 +59,7 @@ def vectorizer(word,emb):
 
 
 ##test NCBI corpus, the mentions are not separated by abstract
-#list of objects
+#list of objects, '/home/lhchan/disease-normalization/data/ncbi-disease/NCBItestset_corpus.txt'
 corpus_objects = test_run.load('gitig_truncated_NCBI.txt','NCBI')
 #list of mentions
 #each mention has a docid and a sections, which contains title and abstract
