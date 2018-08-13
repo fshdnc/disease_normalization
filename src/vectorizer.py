@@ -127,8 +127,9 @@ for entry in dictionary_vectorized.keys():
     print('\n')
 '''
 
-
-
+import candidate_generation
+dictionary_processed = candidate_generation.process_MEDIC_dict(dictionary_tokenized,'skipgram')
+generated_candidates = candidate_generation.generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
 
 """Things to note
 have a draft first
