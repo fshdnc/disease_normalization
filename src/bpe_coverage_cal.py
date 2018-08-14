@@ -1,3 +1,5 @@
+'''load the mentions into a list first'''
+
 from subword_nmt.apply_bpe import BPE
 
 def _load_bpe_model(model):
@@ -21,13 +23,14 @@ def _load_bpe_vocab(vocab_file):
             vocabs.append(vocab)
     return vocabs
 
-def check_coverage(mentions,vocab_file,model,lowercase=True):
+def check_coverage(mentions,vocab_file,model,lowercase=True,print_not_covered=False):
     '''
        mentions: list of untokenized mentions
        vocab: vocab file
+       print_not_covered: if True, prints snippets that are not found in the vocabulary
     '''
     vocabs = _load_bpe_vocab(vocab_file)
-    bpe = load_bpe_model(model)
+    bpe = _load_bpe_model(model)
     denominator = 0
     numerator = 0
     mentions_cased = [mention.lower() if lowercase == True else mention for mention in corpus_mentions]
@@ -37,6 +40,8 @@ def check_coverage(mentions,vocab_file,model,lowercase=True):
         for snippet in snippets:
             if snippet in vocabs:
                 numerator += 1
+            elif print_non_covered == True:
+                print('Mention, snippets, snippet:',mention,snippets,snippet)
     print('File name:',vocab_file)
     print('Coverage of vocab:',float(numerator)/denominator,'\n')
 
