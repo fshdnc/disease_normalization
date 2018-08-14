@@ -87,7 +87,7 @@ def cosine_similarity_ngrams(a, b):
     if not denominator:
         return 0.0
     return float(numerator) / denominator
-    
+
 def generate_candidate(tokenized_mentions,dictionary,n):
     '''inputs:
           tokenized_mentions: list of lists (tokenized mentions)
@@ -114,3 +114,20 @@ def generate_candidate(tokenized_mentions,dictionary,n):
 #generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
 
 #print(token,inversed_vocabulary[token],KeyedVectors.word_vec(vector_model,inversed_vocabulary[token]))
+
+#cut-off score
+
+#trying to debug sim score
+
+for i in range(len(generated_candidates)):
+    flag = False
+    for candidate in generated_candidates[i]:
+        if (candidate[1]!=0) and (candidate[1]!=1):
+            flag = True
+            break
+    if flag == True:
+        print(i)
+        print(corpus_mentions[i])
+        print(generated_candidates[i])
+        print('\n')
+

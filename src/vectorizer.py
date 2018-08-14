@@ -95,7 +95,7 @@ corpus_vectorized_padded = pad_sequences(corpus_vectorized_numpy, padding='post'
 print("New shape:", corpus_vectorized_padded.shape)
 
 
-#test MEDIC dictionary
+#test MEDIC dictionary, '/home/lhchan/disease-normalization/data/ncbi-disease/CTD_diseases.tsv'
 dictionary = test_run.load('gitig_truncated_CTD_diseases.tsv','MEDIC')
 
 def MEDIC_dict_tokenizer_and_vectorizer(MEDIC_dict,tokenizer):
