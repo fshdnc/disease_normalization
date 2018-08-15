@@ -4,6 +4,13 @@ from collections import Counter
 import math
 
 '''
+Things to be fixed
+1. skip-gram generation
+2. cutoff score for candidate generation
+
+'''
+
+'''
 1. function to turn tokenized MEDIC dict into skip-grammed MEDIC dict
 2. function to calculate similarity score for a term
 3. function to generate skipgram from string or list
@@ -63,6 +70,8 @@ def generate_skipgram(w_or_v,n,s):
     check_pos_int(n,'Value for n must be a positive integer')
     check_pos_int(s+1,'Value for s must be non-negative integer.')
     if isinstance(w_or_v,str):
+        if ' ' in w_or_v:
+            raise ValueError('String contains space characters.')
         skipgrams=[w_or_v[i:i+n] for i in range(0,len(w_or_v)-(n-1),s+1)]
     elif isinstance(w_or_v,list):
         skipgrams = []
@@ -105,29 +114,12 @@ def generate_candidate(tokenized_mentions,dictionary,n):
         mention_skipgram = generate_skipgram(mention,2,1)
         candidate_score = []
         for key,allnames in dictionary.items():
-            score = term_sim(mention,allnames)
+            score = term_sim(mention_skipgram,allnames)
             candidate_score.append((key,score))
         candidate_score = sorted(candidate_score, key=lambda x: x[1])
-        generated_candidates.append(candidate_score[-20:])
+        generated_candidates.append(candidate_score[-n:])
     return generated_candidates
 
 #generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
 
 #print(token,inversed_vocabulary[token],KeyedVectors.word_vec(vector_model,inversed_vocabulary[token]))
-
-#cut-off score
-
-#trying to debug sim score
-
-for i in range(len(generated_candidates)):
-    flag = False
-    for candidate in generated_candidates[i]:
-        if (candidate[1]!=0) and (candidate[1]!=1):
-            flag = True
-            break
-    if flag == True:
-        print(i)
-        print(corpus_mentions[i])
-        print(generated_candidates[i])
-        print('\n')
-
