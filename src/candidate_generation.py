@@ -103,21 +103,21 @@ def generate_candidate(tokenized_mentions,dictionary,n):
                               e.g. corpus_tokenized_mentions
           dictionary: skip-grammed dictionary terms
                       e.g. dictionary_processed
-       output: list of lists of 20 (key,score) tuples
+       output: list of lists of n (key,score) tuples
        1. go through every tokenized mention
        2. turn each mention into skipgram
        3. compare with skip-grammed dictionary mention
-       4. return 20 highest scoring dictionary terms
+       4. return n highest scoring dictionary terms
     '''
     generated_candidates = []
     for mention in tokenized_mentions:
-        mention_skipgram = generate_skipgram(mention,2,1)
+        mention_skipgram = generate_skipgram(mention,config['ngram']['n'],config['ngram']['s'])
         candidate_score = []
         for key,allnames in dictionary.items():
             score = term_sim(mention_skipgram,allnames)
             candidate_score.append((key,score))
-        candidate_score = sorted(candidate_score, key=lambda x: x[1])
-        generated_candidates.append(candidate_score[-n:])
+        candidate_score = sorted(candidate_score, key=lambda x: x[1],reverse=True)
+        generated_candidates.append(candidate_score[:n])
     return generated_candidates
 
 #generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
