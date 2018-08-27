@@ -1,10 +1,16 @@
 import vectorizer
 import load
 import configparser as cp
+import args
 
-config = cp.ConfigParser()
+config = cp.ConfigParser(strict=False)
 config.read('defaults.cfg')
 
+args = args.get_args()
+'''
+>>> args.train
+False
+'''
 
 vector_model, vocabulary, inversed_vocabulary = vectorizer.prepare_embedding_vocab('~/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin', binary = True, limit = 50000)
 pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model)
@@ -16,7 +22,7 @@ corpus_objects = load.load(config['corpus']['corpus_file'],'NCBI')
 #each mention has a docid and a sections, which contains title and abstract
 corpus_mentions = [mention.text for obj in corpus_objects for part in obj.sections for mention in part.mentions]
 
-corpus_tokenized_mentions, corpus_vectorized_numpy = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_mentions,'nltk')
+corpus_tokenized_mentions, corpus_vectorized_numpy = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_mentions,config['methods']['tokenizer'])
 
 ##padding
 from keras.preprocessing.sequence import pad_sequences
@@ -27,11 +33,11 @@ print("New shape:", corpus_vectorized_padded.shape)
 ##test MEDIC dictionary
 dictionary = load.load(config['terminology']['dict_file'],'MEDIC')
 
-dictionary_tokenized, dictionary_vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary,'nltk',vocabulary)
+dictionary_tokenized, dictionary_vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary,config['methods']['tokenizer'],vocabulary)
 
 import candidate_generation
-dictionary_processed = candidate_generation.process_MEDIC_dict(dictionary_tokenized,'skipgram')
-generated_candidates = candidate_generation.generate_candidate(corpus_tokenized_mentions,dictionary_processed,config['candidate']['n'])
+dictionary_processed = candidate_generation.process_MEDIC_dict(dictionary_tokenized,config['methods']['candidate_generation'])
+generated_candidates = candidate_generation.generate_candidate(corpus_tokenized_mentions,dictionary_processed,config.getint('candidate','n'))
 
 """Things to note
 have a draft first

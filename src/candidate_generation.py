@@ -2,6 +2,9 @@
 
 from collections import Counter
 import math
+import configparser as cp
+config = cp.ConfigParser(strict=False)
+config.read('defaults.cfg')
 
 '''
 Things to be fixed
@@ -31,7 +34,7 @@ def process_MEDIC_dict(tokenized_MEDIC_dict,method):
     if method == 'skipgram':
         for i,j in tokenized_MEDIC_dict.items():
             #requires config
-            AllNames_skipgram = [generate_skipgram(name,2,1) for name in j]
+            AllNames_skipgram = [generate_skipgram(name,config.getint('ngram','n'),config.getint('ngram','s')) for name in j]
             print(j,AllNames_skipgram)
             print('\n')
             dictionary_processed[i] = AllNames_skipgram
@@ -111,7 +114,7 @@ def generate_candidate(tokenized_mentions,dictionary,n):
     '''
     generated_candidates = []
     for mention in tokenized_mentions:
-        mention_skipgram = generate_skipgram(mention,config['ngram']['n'],config['ngram']['s'])
+        mention_skipgram = generate_skipgram(mention,config.getint('ngram','n'),config.getint('ngram','s'))
         candidate_score = []
         for key,allnames in dictionary.items():
             score = term_sim(mention_skipgram,allnames)
