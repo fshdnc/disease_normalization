@@ -35,8 +35,7 @@ def process_MEDIC_dict(tokenized_MEDIC_dict,method):
         for i,j in tokenized_MEDIC_dict.items():
             #requires config
             AllNames_skipgram = [generate_skipgram(name,config.getint('ngram','n'),config.getint('ngram','s')) for name in j]
-            print(j,AllNames_skipgram)
-            print('\n')
+            #print(j,AllNames_skipgram,'\n')
             dictionary_processed[i] = AllNames_skipgram
     return dictionary_processed
 

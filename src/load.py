@@ -77,8 +77,7 @@ def _load_MEDIC(filename):
         MEDIC_dict = {}
 
         for DiseaseID, entry in parse_MEDIC_dictionary.parse_MEDIC_dictionary(filename):
-                print(entry)
-                print('\n')
+                #print(entry,'\n')
                 assert DiseaseID not in MEDIC_dict.keys()
                 MEDIC_dict[DiseaseID] = entry
         return MEDIC_dict
