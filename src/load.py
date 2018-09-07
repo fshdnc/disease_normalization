@@ -81,3 +81,12 @@ def _load_MEDIC(filename):
                 assert DiseaseID not in MEDIC_dict.keys()
                 MEDIC_dict[DiseaseID] = entry
         return MEDIC_dict
+
+
+'''object for dictionary'''
+class Terminology:
+    def __init__(self):
+        self.loaded = None
+        self.tokenized = None
+        self.vectorized = None
+        self.processed = None

@@ -1,5 +1,6 @@
 import vectorizer
 import load
+import sample
 import configparser as cp
 import args
 import logging
@@ -36,32 +37,43 @@ pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model
 ##test NCBI corpus, the mentions are not separated by abstract
 #list of objects, '/home/lhchan/disease-normalization/data/ncbi-disease/NCBItestset_corpus.txt'
 logger.info('Loading NCBI corpus...')
-corpus_objects = load.load(config['corpus']['corpus_file'],'NCBI')
+corpus = sample.DataSet()
+##change# corpus_objects = load.load(config['corpus']['corpus_file'],'NCBI')
+corpus.objects = load.load(config['corpus']['corpus_file'],'NCBI')
 #list of mentions
 #each mention has a docid and a sections, which contains title and abstract
-corpus_mentions = [mention.text for obj in corpus_objects for part in obj.sections for mention in part.mentions]
+##change# corpus_mentions = [mention.text for obj in corpus_objects for part in obj.sections for mention in part.mentions]
+corpus.mentions = [mention.text for obj in corpus.objects for part in obj.sections for mention in part.mentions]
 logger.info('Tokenizing and vectorizing mentions...')
-corpus_tokenized_mentions, corpus_vectorized_numpy = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_mentions,config['methods']['tokenizer'])
+corpus.tokenized_mentions, corpus.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus.mentions,config['methods']['tokenizer'])
+##change# corpus_tokenized_mentions, corpus_vectorized_numpy = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_mentions,config['methods']['tokenizer'])
 
 #padding for mentions
 from keras.preprocessing.sequence import pad_sequences
-logger.info('Old shape: {0}'.format(corpus_vectorized_numpy.shape))
-corpus_vectorized_padded = pad_sequences(corpus_vectorized_numpy, padding='post')
-logger.info('New shape: {0}'.format(corpus_vectorized_padded.shape))
+logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
+corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
+##change# corpus_vectorized_padded = pad_sequences(corpus_vectorized_numpy, padding='post')
+#format of corpus.padded: numpy, mentions, padded
+logger.info('New shape: {0}'.format(corpus.padded.shape))
 
 #test MEDIC dictionary
 logger.info('Loading dictionary...')
-dictionary = load.load(config['terminology']['dict_file'],'MEDIC')
+dictionary = load.Terminology()
+dictionary.loaded = load.load(config['terminology']['dict_file'],'MEDIC')
 logger.info('Tokenizing and vectorizing dictionary terms...')
-dictionary_tokenized, dictionary_vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary,config['methods']['tokenizer'],vocabulary)
+dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
 
 #candidate generation
 import candidate_generation
 logger.info('Generating candidates...')
-dictionary_processed = candidate_generation.process_MEDIC_dict(dictionary_tokenized,config['methods']['candidate_generation'])
+dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
 logger.info('Start generating candidates...')
-generated_candidates = candidate_generation.generate_candidate(corpus_tokenized_mentions,dictionary_processed,config.getint('candidate','n'))
-logger.info('Finished generating {0} candidates.'.format(len(corpus_tokenized_mentions)))
+training_data = sample.Sample()
+generated_candidates = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,config.getint('candidate','n'))
+logger.info('Finished generating {0} candidates.'.format(len(corpus.tokenized_mentions)))
+
+
+
 
 '''
 #save candidates / load previously generated candidates
@@ -72,6 +84,13 @@ logger.info('Saving generated candidates...')
 generated_candidates = tools.readin_generated_candidates(config['settings']['gencan_file'])
 logger.info('Loading generated candidates...')
 '''
+
+'''
+for mention_vector, candidates in zip(corpus_vectorized_padded[:100],generated_candidates):
+	
+
+'''
+
 
 
 
