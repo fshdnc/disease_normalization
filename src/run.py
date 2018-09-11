@@ -4,6 +4,7 @@ import sample
 import configparser as cp
 import args
 import logging
+import numpy as np
 
 #configurations
 config = cp.ConfigParser(strict=False)
@@ -38,21 +39,17 @@ pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model
 #list of objects, '/home/lhchan/disease-normalization/data/ncbi-disease/NCBItestset_corpus.txt'
 logger.info('Loading NCBI corpus...')
 corpus = sample.DataSet()
-##change# corpus_objects = load.load(config['corpus']['corpus_file'],'NCBI')
 corpus.objects = load.load(config['corpus']['corpus_file'],'NCBI')
 #list of mentions
 #each mention has a docid and a sections, which contains title and abstract
-##change# corpus_mentions = [mention.text for obj in corpus_objects for part in obj.sections for mention in part.mentions]
 corpus.mentions = [mention.text for obj in corpus.objects for part in obj.sections for mention in part.mentions]
 logger.info('Tokenizing and vectorizing mentions...')
 corpus.tokenized_mentions, corpus.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus.mentions,config['methods']['tokenizer'])
-##change# corpus_tokenized_mentions, corpus_vectorized_numpy = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_mentions,config['methods']['tokenizer'])
 
 #padding for mentions
 from keras.preprocessing.sequence import pad_sequences
 logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
 corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
-##change# corpus_vectorized_padded = pad_sequences(corpus_vectorized_numpy, padding='post')
 #format of corpus.padded: numpy, mentions, padded
 logger.info('New shape: {0}'.format(corpus.padded.shape))
 
@@ -69,9 +66,16 @@ logger.info('Generating candidates...')
 dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
 logger.info('Start generating candidates...')
 training_data = sample.Sample()
-generated_candidates = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,config.getint('candidate','n'))
+training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,config.getint('candidate','n'))
 logger.info('Finished generating {0} candidates.'.format(len(corpus.tokenized_mentions)))
+logger.info('Formatting candidates...')
 
+#formatting generated candidates
+logger.warning('Using only first 100 mentions!')
+#change## training_data.mentions = sample.format_candidates(training_data.generated,corpus.mentions[:100],corpus.padded[:100])
+
+#function parameters need updating
+sample.format_candidates(training_data.generated,corpus.mentions[:100])
 
 
 
@@ -81,7 +85,7 @@ import tools
 tools.output_generated_candidates(config['settings']['gencan_file'])
 logger.info('Saving generated candidates...')
 
-generated_candidates = tools.readin_generated_candidates(config['settings']['gencan_file'])
+training_data.generated = tools.readin_generated_candidates(config['settings']['gencan_file'])
 logger.info('Loading generated candidates...')
 '''
 
