@@ -3,6 +3,7 @@
 '''class objects for dataset and samples'''
 
 import numpy as np
+from keras.preprocessing.sequence import pad_sequences
 
 class DataSet:
     def __init__(self):
@@ -25,7 +26,7 @@ class Sample:
         self.y = None
         self.mentions = None
 
-def format_candidates(sample,corpus_data,can_list,men_list,men_padded,dict):
+def format_candidates(sample,corpus_data,can_list,men_list,men_padded,vec_dict):
     logger.info('Formatting mentions...')
     sample.mentions, x_zero = _format_mentions_and_x0(can_list,men_list,men_padded)
     sample.x = _format_x(can_list,x_zero)
@@ -51,11 +52,15 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
         start_index = end_index
     return mentions, x_zero
 
-def _format_x(can_list,x_zero,dict):
+def _format_x(can_list,x_zero,vec_dict):
     '''
     can_list: list of list (mention level) of generated candidates
     x_zero: list of numpy array of vectorized mentions
-    dict: vectorized controlled vocabulary
+    vec_dict: vectorized controlled vocabulary
+
+    #check dict format: vectorized_dictionary[id]: [[1, 1445], [1445, 1]], vectorized AllNames
+    #check terminology mapping
+    #check how candidates are generated, if there's chance of non-canonical ids (no)
     '''
     # x[1] = vectorized candidates
     x_one = []
@@ -64,27 +69,44 @@ def _format_x(can_list,x_zero,dict):
     x_two = []
     #can_list>mention format: list of lists of n (key,score) tuples
     for mention in can_list:
-        for can, score in mention:
-            x_one.append(dict.get(can,_non_canonical(can)))
+        for can_id, score in mention:
+            #x_one.append(vec_dict.get(can_id,_non_canonical(can_id)))
+            x_one.append(vec_dict[can_id])
             x_two.append([score])
-        
-            #check dict format, check terminology mapping
-            #check how candidates are generated, if there's chance of non-canonical ids
-    logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
+    #logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
+    logger.info('Padding...')
+    x_zero_np = np.array(x_zero)
+    x_one_np = np.array(x_one)
+    x_two_np = np.array(x_two)
+    #more whipping matrix into np array
 
-            #pad the thing
+    logger.info('Old shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_np.shape,x_two_np.shape))
+    x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=max(lengths))
+#check duplicate candidates
 
+'''
+print("Old shape:", vectorized_data.shape)
+vectorized_data_padded=pad_sequences(vectorized_data, padding='post', maxlen=max(lengths))
+print("New shape:", vectorized_data_padded.shape)
+print("First example:", vectorized_data_padded[0])
+# Even with the sparse output format, the shape has to be similar to the one-hot encoding
+vectorized_labels_padded=numpy.expand_dims(pad_sequences(vectorized_labels, padding='post', maxlen=max(lengths)), -1)
+print("Padded labels shape:", vectorized_labels_padded.shape)
+print(label_map)
+print("First example labels:", vectorized_labels_padded[0])
+'''
 
 
     x = np.array([x_zero,x_one,x_two])
     return x
 
-def _non_canonical(id):
-    assert id not in dict
+'''
+#not needed for now because all id are supposed to be canonical
+#due to candidate_generation.generate_candidate function
+def _non_canonical(can_id):
+    assert can_id not in vec_dict
     
         debug_count_noncan += 1
         return
-
-    disambiguated = 
-
+'''
 
