@@ -50,15 +50,15 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
         end_index = start_index + can_number
         mentions.append(start_index, end_index, mention)
         start_index = end_index
-    return mentions, x_zero
+    return mentions, np.array(x_zero)
 
 def _format_x(can_list,x_zero,vec_dict):
     '''
     can_list: list of list (mention level) of generated candidates
-    x_zero: list of numpy array of vectorized mentions
+    x_zero: np array of np array of vectorized mentions
     vec_dict: vectorized controlled vocabulary
 
-    #check dict format: vectorized_dictionary[id]: [[1, 1445], [1445, 1]], vectorized AllNames
+    #check dict format: vectorized_dictionary[id]: np.array([[1, 1445], [1445, 1]]), vectorized AllNames
     #check terminology mapping
     #check how candidates are generated, if there's chance of non-canonical ids (no)
     '''
@@ -72,16 +72,18 @@ def _format_x(can_list,x_zero,vec_dict):
         for can_id, score in mention:
             #x_one.append(vec_dict.get(can_id,_non_canonical(can_id)))
             x_one.append(vec_dict[can_id])
-            x_two.append([score])
+            x_two.append(np.array([score]))
     #logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
     logger.info('Padding...')
-    x_zero_np = np.array(x_zero)
     x_one_np = np.array(x_one)
     x_two_np = np.array(x_two)
-    #more whipping matrix into np array
-
     logger.info('Old shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_np.shape,x_two_np.shape))
-    x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=max(lengths))
+    x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=len(max(x_zero_np,key=len)))
+
+    #pad x_one  
+    
+    logger.info('New shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_padded.shape,x_one_padded.shape,x_two_np.shape))
+
 #check duplicate candidates
 
 '''

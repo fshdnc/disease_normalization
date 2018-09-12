@@ -58,7 +58,7 @@ logger.info('Loading dictionary...')
 dictionary = load.Terminology()
 dictionary.loaded = load.load(config['terminology']['dict_file'],'MEDIC')
 logger.info('Tokenizing and vectorizing dictionary terms...')
-dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
+dictionary.tokenized, dictionary.vectorized_np = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
 
 #candidate generation
 import candidate_generation
