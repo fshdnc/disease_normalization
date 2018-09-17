@@ -5,6 +5,9 @@
 import numpy as np
 from keras.preprocessing.sequence import pad_sequences
 
+import logging
+logger = logging.getLogger(__name__)
+
 class DataSet:
     def __init__(self):
         self.objects = None
@@ -26,10 +29,21 @@ class Sample:
         self.y = None
         self.mentions = None
 
-def format_candidates(sample,corpus_data,can_list,men_list,men_padded,vec_dict):
+def format_candidates(sample,cor_mens,vec_dict):
+    '''
+    Formats candidates and assigns formatted candidates to sample's attributes
+    Affected attributes: sample.mentions, sample.x
+
+    Input:
+        sample: object whose attribute is to be assigned
+            sample.generated: list of generated candidates
+        men_list: list of mentions
+        vec_dict: vectorized controlled vocabulary
+    '''
     logger.info('Formatting mentions...')
-    sample.mentions, x_zero = _format_mentions_and_x0(can_list,men_list,men_padded)
-    sample.x = _format_x(can_list,x_zero)
+    logger.warning('Modify next line afterwards')
+    sample.mentions, x_zero_np = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
+    sample.x = _format_x(sample.generated,x_zero_np,vec_dict)
 
 def _format_mentions_and_x0(can_list,men_list,men_padded):
     '''
@@ -50,13 +64,19 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
         end_index = start_index + can_number
         mentions.append(start_index, end_index, mention)
         start_index = end_index
+    import pdb; pdb.set_trace()
     return mentions, np.array(x_zero)
 
-def _format_x(can_list,x_zero,vec_dict):
+def _format_x(can_list,x_zero_np,vec_dict):
     '''
     can_list: list of list (mention level) of generated candidates
-    x_zero: np array of np array of vectorized mentions
+    x_zero_np: np array of np array of vectorized mentions
     vec_dict: vectorized controlled vocabulary
+
+    output: np.array(x_zero_padded,x_one_padded,x_two_padded)
+    x_zero: np array of np array of vectorized mentions
+    x_one: np array (mention in np array (vectorized candidates in np array))
+    x_two: np array of np array of scores
 
     #check dict format: vectorized_dictionary[id]: np.array([[1, 1445], [1445, 1]]), vectorized AllNames
     #check terminology mapping
@@ -79,26 +99,9 @@ def _format_x(can_list,x_zero,vec_dict):
     x_two_np = np.array(x_two)
     logger.info('Old shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_np.shape,x_two_np.shape))
     x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=len(max(x_zero_np,key=len)))
-
-    #pad x_one  
-    
+    x_one_padded = pad_sequences(x_one_np,padding='post')
+    x_two_padded = pad_sequences(x_two_np,padding='post')
     logger.info('New shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_padded.shape,x_one_padded.shape,x_two_np.shape))
-
-#check duplicate candidates
-
-'''
-print("Old shape:", vectorized_data.shape)
-vectorized_data_padded=pad_sequences(vectorized_data, padding='post', maxlen=max(lengths))
-print("New shape:", vectorized_data_padded.shape)
-print("First example:", vectorized_data_padded[0])
-# Even with the sparse output format, the shape has to be similar to the one-hot encoding
-vectorized_labels_padded=numpy.expand_dims(pad_sequences(vectorized_labels, padding='post', maxlen=max(lengths)), -1)
-print("Padded labels shape:", vectorized_labels_padded.shape)
-print(label_map)
-print("First example labels:", vectorized_labels_padded[0])
-'''
-
-
     x = np.array([x_zero,x_one,x_two])
     return x
 

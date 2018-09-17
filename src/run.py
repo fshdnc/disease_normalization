@@ -18,6 +18,15 @@ False
 '''
 
 #logging
+'''
+#incorporate this into the rest somehow
+def main():
+    import logging.congig
+    logging.config.fileConfig('/path/to/logging.conf')
+
+if __name__ == '__main__':
+	main
+'''
 logger = logging.getLogger(__name__)
 logger.setLevel(config.getint('settings','logging_level'))
 formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
@@ -70,24 +79,27 @@ training_data.generated = candidate_generation.generate_candidate(corpus.tokeniz
 logger.info('Finished generating {0} candidates.'.format(len(corpus.tokenized_mentions)))
 logger.info('Formatting candidates...')
 
-#formatting generated candidates
-logger.warning('Using only first 100 mentions!')
-#change## training_data.mentions = sample.format_candidates(training_data.generated,corpus.mentions[:100],corpus.padded[:100])
-
-#function parameters need updating
-sample.format_candidates(training_data.generated,corpus.mentions[:100])
-
-
-
 '''
 #save candidates / load previously generated candidates
 import tools
 tools.output_generated_candidates(config['settings']['gencan_file'])
 logger.info('Saving generated candidates...')
 
+training_data = sample.Sample()
 training_data.generated = tools.readin_generated_candidates(config['settings']['gencan_file'])
 logger.info('Loading generated candidates...')
 '''
+
+#formatting generated candidates
+logger.warning('Using only first 100 mentions!')
+#change## training_data.mentions = sample.format_candidates(training_data.generated,corpus.mentions[:100],corpus.padded[:100])
+
+#function parameters need updating
+#modify format_candidates to remove 100
+sample.format_candidates(training_data,corpus,dictionary.vectorized_np)
+
+#format previous line!
+
 
 '''
 for mention_vector, candidates in zip(corpus_vectorized_padded[:100],generated_candidates):
