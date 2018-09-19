@@ -82,9 +82,10 @@ logger.info('Formatting candidates...')
 '''
 #save candidates / load previously generated candidates
 import tools
-tools.output_generated_candidates(config['settings']['gencan_file'])
+tools.output_generated_candidates(config['settings']['gencan_file'],training_data.generated)
 logger.info('Saving generated candidates...')
 
+import tools
 training_data = sample.Sample()
 training_data.generated = tools.readin_generated_candidates(config['settings']['gencan_file'])
 logger.info('Loading generated candidates...')
@@ -98,8 +99,19 @@ logger.warning('Using only first 100 mentions!')
 #modify format_candidates to remove 100
 sample.format_candidates(training_data,corpus,dictionary.vectorized_np)
 
-#format previous line!
+#debug previous line!
 
+'''
+#saving working environment
+#tools.shelve_working_env('gitig_cureent_working_env')
+
+import dill
+dill.dump_session('gitig_cureent_working_env')
+
+import dill
+#load the session
+dill.load_session('gitig_cureent_working_env')
+'''
 
 '''
 for mention_vector, candidates in zip(corpus_vectorized_padded[:100],generated_candidates):

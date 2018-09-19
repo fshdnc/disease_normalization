@@ -58,13 +58,13 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
     start_index = 0
     end_index = 0
     x_zero = []
+    assert len(can_list)==len(men_list) & len(men_list)==len(men_padded)
     for candidates, mention, padded_mention in zip(can_list,men_list,men_padded):
         can_number = len(candidates)
         x_zero.append(men_padded*can_number)
         end_index = start_index + can_number
-        mentions.append(start_index, end_index, mention)
+        mentions.append((start_index, end_index, mention))
         start_index = end_index
-    import pdb; pdb.set_trace()
     return mentions, np.array(x_zero)
 
 def _format_x(can_list,x_zero_np,vec_dict):
@@ -84,7 +84,7 @@ def _format_x(can_list,x_zero_np,vec_dict):
     '''
     # x[1] = vectorized candidates
     x_one = []
-    debug_count_noncan = 0
+    #debug_count_noncan = 0
     # x[2] = candidate generation scores
     x_two = []
     #can_list>mention format: list of lists of n (key,score) tuples
@@ -92,14 +92,29 @@ def _format_x(can_list,x_zero_np,vec_dict):
         for can_id, score in mention:
             #x_one.append(vec_dict.get(can_id,_non_canonical(can_id)))
             x_one.append(vec_dict[can_id])
-            x_two.append(np.array([score]))
+            #x_two.append(np.array([score]))
+            x_two.append([score])
     #logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
     logger.info('Padding...')
-    x_one_np = np.array(x_one)
+
+    #------------------------------------
+    #pad x_one
+    flat_x_one = [item for sublist in x_one for item in sublist]
+    #get longest element
+    pad_len = len(max(flat_x_one,key=len))
+    x_one_new = [mention+[0]*(pad_len-len(mention)) for mention in x_one]
+    
+    #look for other ways of padding, ask Lenz/Kai for advice
+    #rewrite the padding, the above line doesn't work
+
+    x_one_np = np.array(x_one_new)
     x_two_np = np.array(x_two)
+    import pdb; pdb.set_trace()
     logger.info('Old shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_np.shape,x_two_np.shape))
     x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=len(max(x_zero_np,key=len)))
+    #complains here
     x_one_padded = pad_sequences(x_one_np,padding='post')
+    #------------------------------------
     x_two_padded = pad_sequences(x_two_np,padding='post')
     logger.info('New shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_padded.shape,x_one_padded.shape,x_two_np.shape))
     x = np.array([x_zero,x_one,x_two])

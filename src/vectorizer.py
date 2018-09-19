@@ -136,13 +136,20 @@ def MEDIC_dict_tokenizer_and_vectorizer(MEDIC_dict,tokenizer,vocabulary):
             vectorized_dictionary_np[id]: numpy.array([[1, 1445], [1445, 1]])
     '''
     dictionary_tokenized={}
-    dictionary_vectorized_np = {}
+    #dictionary_vectorized_np = {}
+    dictionary_vectorized = {}
     for i,j in MEDIC_dict.items():
         AllNames_tokenized = [tok(i.lower(),'nltk') for i in j.AllNames]
         dictionary_tokenized[i] = AllNames_tokenized
+        '''
+        #vectorized in np.array format
         AllNames_vectorized_np = numpy.array([numpy.array([vocabulary.get(token,1) for token in name]) for name in AllNames_tokenized])
         dictionary_vectorized_np[i] = AllNames_vectorized_np
     return dictionary_tokenized, dictionary_vectorized_np
+        '''
+        AllNames_vectorized = [[vocabulary.get(token,1) for token in name] for name in AllNames_tokenized]
+        dictionary_vectorized[i] = AllNames_vectorized
+    return dictionary_tokenized, dictionary_vectorized
 
 #dictionary_tokenized, dictionary_vectorized = MEDIC_dict_tokenizer_and_vectorizer(dictionary,'nltk')
 
