@@ -101,17 +101,10 @@ sample.format_candidates(training_data,corpus,dictionary.vectorized_np)
 
 #debug previous line!
 
-'''
-#saving working environment
-#tools.shelve_working_env('gitig_cureent_working_env')
 
-import dill
-dill.dump_session('gitig_cureent_working_env')
 
-import dill
-#load the session
-dill.load_session('gitig_cureent_working_env')
-'''
+
+
 
 '''
 for mention_vector, candidates in zip(corpus_vectorized_padded[:100],generated_candidates):
