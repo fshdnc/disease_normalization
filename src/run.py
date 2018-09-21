@@ -66,8 +66,12 @@ logger.info('New shape: {0}'.format(corpus.padded.shape))
 logger.info('Loading dictionary...')
 dictionary = load.Terminology()
 dictionary.loaded = load.load(config['terminology']['dict_file'],'MEDIC')
+'''
 logger.info('Tokenizing and vectorizing dictionary terms...')
 dictionary.tokenized, dictionary.vectorized_np = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
+'''
+logger.info('Tokenizing dictionary terms...')
+dictionary.tokenized = vectorizer.MEDIC_dict_tokenizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
 
 #candidate generation
 import candidate_generation
@@ -75,7 +79,7 @@ logger.info('Generating candidates...')
 dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
 logger.info('Start generating candidates...')
 training_data = sample.Sample()
-training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,config.getint('candidate','n'))
+training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,config.getint('candidate','n'))
 logger.info('Finished generating {0} candidates.'.format(len(corpus.tokenized_mentions)))
 logger.info('Formatting candidates...')
 

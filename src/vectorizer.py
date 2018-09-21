@@ -127,17 +127,18 @@ print("New shape:", corpus_vectorized_padded.shape)
 dictionary = load.load('gitig_truncated_CTD_diseases.tsv','MEDIC')
 '''
 
-def MEDIC_dict_tokenizer_and_vectorizer(MEDIC_dict,tokenizer,vocabulary):
+def MEDIC_dict_tokenizer(MEDIC_dict,tokenizer,vocabulary):
+#def MEDIC_dict_tokenizer_and_vectorizer(MEDIC_dict,tokenizer,vocabulary):
     '''construct a new dictionary
        key: canonical ID
        value: list of list of vectorized disease name
        e.g. original_dictionary[id].AllNames: ('1p36.33 deletion', 'Deletion 1p36.33')
             tokenized_dictionary[id]: [['1p36.33', 'deletion'], ['deletion', '1p36.33']]
-            vectorized_dictionary_np[id]: numpy.array([[1, 1445], [1445, 1]])
+            #vectorized_dictionary_np[id]: numpy.array([[1, 1445], [1445, 1]])
     '''
     dictionary_tokenized={}
     #dictionary_vectorized_np = {}
-    dictionary_vectorized = {}
+    #dictionary_vectorized = {}
     for i,j in MEDIC_dict.items():
         AllNames_tokenized = [tok(i.lower(),'nltk') for i in j.AllNames]
         dictionary_tokenized[i] = AllNames_tokenized
@@ -147,11 +148,15 @@ def MEDIC_dict_tokenizer_and_vectorizer(MEDIC_dict,tokenizer,vocabulary):
         dictionary_vectorized_np[i] = AllNames_vectorized_np
     return dictionary_tokenized, dictionary_vectorized_np
         '''
+        '''
         AllNames_vectorized = [[vocabulary.get(token,1) for token in name] for name in AllNames_tokenized]
         dictionary_vectorized[i] = AllNames_vectorized
-    return dictionary_tokenized, dictionary_vectorized
+        '''
+    return dictionary_tokenized #, dictionary_vectorized
 
 #dictionary_tokenized, dictionary_vectorized = MEDIC_dict_tokenizer_and_vectorizer(dictionary,'nltk')
+
+def candidate_vectorizer(tokenized_candidate,tokenizer):
 
 '''
 #Visual check of vectorization result of MEDIC

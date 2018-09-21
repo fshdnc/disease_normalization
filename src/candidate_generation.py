@@ -44,17 +44,21 @@ def process_MEDIC_dict(tokenized_MEDIC_dict,method):
 ## cosine similarity of skip-grams
 ## idea taken from tzlink
 
-def term_sim(mention,candidates):
+def term_sim(key,mention,candidates_processed,candidates_tokenized):
     '''
-    mention: skip-grammed mention as a list
-    candidates: list of candidates, each a skip-grammed term
-    output: highest score of the list of candidates
+    Input:
+        mention: skip-grammed mention as a list
+        candidates_processed: list of candidates, each a skip-grammed term
+        candidates_tokenized: list of candidates, each a tokenized term
+    output:list of tuples (key,tokenized_candidate,score)
+    #output: (highest score and mention name) of the list of candidates
     '''
     sim_score = []
-    for candidate in candidates:
-        sim = cosine_similarity_ngrams(mention,candidate)
-        sim_score.append(sim)
-    return max(sim_score)
+    for can_processed, can_tokenized in zip(candidates_processed,candidates_tokenized):
+        sim = cosine_similarity_ngrams(mention,can_processed)
+        sim_score.append((key,can_tokenized,sim))
+    return sim_score
+    #return max(sim_score,key=lambda x:x[2])
 
 def generate_skipgram(w_or_v,n,s):
     '''
@@ -99,27 +103,30 @@ def cosine_similarity_ngrams(a, b):
         return 0.0
     return float(numerator) / denominator
 
-def generate_candidate(tokenized_mentions,dictionary,n):
+def generate_candidate(tokenized_mentions,dictionary_processed,dictionary_tokenized,n):
     '''inputs:
           tokenized_mentions: list of lists (tokenized mentions)
                               e.g. corpus_tokenized_mentions
-          dictionary: skip-grammed dictionary terms
+          dictionary_processed: skip-grammed dictionary terms
                       e.g. dictionary_processed
-       output: list of lists of n (key,score) tuples
+          dictionary_tokenized: tokenized dictionary
+       output: list of lists of n (key,tokenized candidate,score) tuples
        1. go through every tokenized mention
        2. turn each mention into skipgram
        3. compare with skip-grammed dictionary mention
-       4. return n highest scoring dictionary terms
+       4. return n highest scoring candidates (key,candidate,score)
+          may contain multiple candidates from same dictionary term
     '''
     generated_candidates = []
     for mention in tokenized_mentions:
         mention_skipgram = generate_skipgram(mention,config.getint('ngram','n'),config.getint('ngram','s'))
-        candidate_score = []
-        for key,allnames in dictionary.items():
-            score = term_sim(mention_skipgram,allnames)
-            candidate_score.append((key,score))
-        candidate_score = sorted(candidate_score, key=lambda x: x[1],reverse=True)
-        generated_candidates.append(candidate_score[:n])
+        candidates_list = []
+        for key,allnames in dictionary_processed.items():
+            term_tokenized = dictionary_tokenized[key]
+            candidates_list.extend(term_sim(key,mention_skipgram,allnames,term_tokenized))
+        candidates_list = sorted(candidates_list, key=lambda x: x[2],reverse=True)
+        
+        generated_candidates.append(candidates_list[:n])
     return generated_candidates
 
 #generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
