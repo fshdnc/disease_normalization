@@ -72,7 +72,8 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
 
 def _format_x(can_list,x_zero_np,vec_dict):
     '''
-    can_list: list of list (mention level) of generated candidates (key,tokenized candidate,score)
+    can_list: list of list (mention level) of generated candidates in the format of
+              (key,tokenized candidate,vectorized candidate,score)
     x_zero_np: np array of np array of vectorized mentions
     vec_dict: vectorized controlled vocabulary
 
@@ -90,11 +91,13 @@ def _format_x(can_list,x_zero_np,vec_dict):
     #debug_count_noncan = 0
     # x[2] = candidate generation scores
     x_two = []
-    #can_list>mention format: list of lists of n (key,score) tuples
+    logger.debug('Tokenized candidates not used for now, may be needed in the future.')
+    #can_list>mention format: list of lists of n*(key,tokenized candidate,vectorized candidate,score)
     for mention in can_list:
-        import pdb; pdb.set_trace()
         for candidate in mention:
-            pass
+            x_one.append(candidate[2])
+            x_two.append(candidate[3])
+            #pass
             '''
             #debugging
             for can_id, tok_can, score in candidate:
@@ -105,8 +108,15 @@ def _format_x(can_list,x_zero_np,vec_dict):
             '''
     #logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
     logger.info('Padding...')
+    pad_len = len(max(x_one,key=len))
+    x_one_new = [mention+[0]*(pad_len-len(mention)) for mention in x_one]
+
+    logger.debug('Check 1. format of x_0 at this point (numpy? padded? 2. format2 of x_1, x_2')
+    import pdb; pdb.set_trace()
 
     #------------------------------------
+    '''
+    #old padding before each candidate was changed to vectorized mention instead of vectorized AllNames
     #pad x_one
     flat_x_one = [item for sublist in x_one for item in sublist]
     #get longest element
@@ -115,10 +125,10 @@ def _format_x(can_list,x_zero_np,vec_dict):
     
     #look for other ways of padding, ask Lenz/Kai for advice
     #rewrite the padding, the above line doesn't work
-
+    '''
     x_one_np = np.array(x_one_new)
     x_two_np = np.array(x_two)
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     logger.info('Old shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_np.shape,x_two_np.shape))
     x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=len(max(x_zero_np,key=len)))
     #complains here

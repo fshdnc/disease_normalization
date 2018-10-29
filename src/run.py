@@ -76,6 +76,7 @@ dictionary.tokenized = vectorizer.MEDIC_dict_tokenizer(dictionary.loaded,config[
 
 #candidate generation
 import candidate_generation
+'''
 logger.info('Generating candidates...')
 dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
 logger.info('Start generating candidates...')
@@ -84,24 +85,24 @@ logger.warning('Using only first 100 mentions!')
 #training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
 training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions[:100],dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
 logger.info('Finished generating {0} candidates.'.format(len(training_data.generated)))
+'''
 
 '''
 #save candidates / load previously generated candidates
 import pickle
 with open(config['settings']['gencan_file'],'wb') as f:
     pickle.dump(training_data.generated,f)
-logger.info('Saving generated candidates...')
 
+logger.info('Saving generated candidates...')
+'''
 import pickle
 training_data = sample.Sample()
 training_data.generated = pickle.load(open(config['settings']['gencan_file'],'rb'))
 logger.info('Loading generated candidates...')
-'''
+
 
 #formatting generated candidates
 logger.info('Formatting candidates...')
-training_data.mentions = sample.format_candidates(training_data,corpus,dictionary.vectorized)
-
 #function parameters need updating
 #modify format_candidates to remove 100
 sample.format_candidates(training_data,corpus,dictionary.vectorized)
