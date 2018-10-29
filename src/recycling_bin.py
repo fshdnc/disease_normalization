@@ -1,4 +1,17 @@
 '''
+file: run-py
+old version of saving generated candidates
+'''
+import tools
+tools.output_generated_candidates(config['settings']['gencan_file'],training_data.generated)
+logger.info('Saving generated candidates...')
+
+import tools
+training_data = sample.Sample()
+training_data.generated = tools.readin_generated_candidates(config['settings']['gencan_file'])
+logger.info('Loading generated candidates...')
+
+'''
 file: run.py
 tryiny to pickle objects
 problems:

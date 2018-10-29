@@ -88,5 +88,5 @@ class Terminology:
     def __init__(self):
         self.loaded = None
         self.tokenized = None
-        #self.vectorized_np = None
+        self.vectorized = None
         self.processed = None

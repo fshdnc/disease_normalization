@@ -37,12 +37,14 @@ def format_candidates(sample,cor_mens,vec_dict):
     Input:
         sample: object whose attribute is to be assigned
             sample.generated: list of generated candidates
-        men_list: list of mentions
+        cor_mens: list of mentions
         vec_dict: vectorized controlled vocabulary
     '''
     logger.info('Formatting mentions...')
     logger.warning('Modify next line afterwards')
     sample.mentions, x_zero_np = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
+    logger.debug('Seems fine up to here.')
+    #sample.mentions, x_zero = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
     sample.x = _format_x(sample.generated,x_zero_np,vec_dict)
 
 def _format_mentions_and_x0(can_list,men_list,men_padded):
@@ -61,15 +63,16 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
     assert len(can_list)==len(men_list) & len(men_list)==len(men_padded)
     for candidates, mention, padded_mention in zip(can_list,men_list,men_padded):
         can_number = len(candidates)
-        x_zero.append(men_padded*can_number)
+        x_zero.append(padded_mention*can_number)
         end_index = start_index + can_number
         mentions.append((start_index, end_index, mention))
         start_index = end_index
     return mentions, np.array(x_zero)
+    #return mentions, x_zero
 
 def _format_x(can_list,x_zero_np,vec_dict):
     '''
-    can_list: list of list (mention level) of generated candidates
+    can_list: list of list (mention level) of generated candidates (key,tokenized candidate,score)
     x_zero_np: np array of np array of vectorized mentions
     vec_dict: vectorized controlled vocabulary
 
@@ -89,11 +92,17 @@ def _format_x(can_list,x_zero_np,vec_dict):
     x_two = []
     #can_list>mention format: list of lists of n (key,score) tuples
     for mention in can_list:
-        for can_id, score in mention:
-            #x_one.append(vec_dict.get(can_id,_non_canonical(can_id)))
-            x_one.append(vec_dict[can_id])
-            #x_two.append(np.array([score]))
-            x_two.append([score])
+        import pdb; pdb.set_trace()
+        for candidate in mention:
+            pass
+            '''
+            #debugging
+            for can_id, tok_can, score in candidate:
+                #x_one.append(vec_dict.get(can_id,_non_canonical(can_id)))
+                x_one.append(vec_dict[can_id])
+                #x_two.append(np.array([score]))
+                x_two.append([score])
+            '''
     #logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
     logger.info('Padding...')
 

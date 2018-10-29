@@ -44,21 +44,21 @@ def process_MEDIC_dict(tokenized_MEDIC_dict,method):
 ## cosine similarity of skip-grams
 ## idea taken from tzlink
 
-def term_sim(key,mention,candidates_processed,candidates_tokenized):
+def term_sim(key,mention,candidates_processed,candidates_tokenized,candidates_vectorized):
     '''
     Input:
         mention: skip-grammed mention as a list
         candidates_processed: list of candidates, each a skip-grammed term
         candidates_tokenized: list of candidates, each a tokenized term
-    output:list of tuples (key,tokenized_candidate,score)
+        candidates_vectorized: list of candidates, each a vectorized term
+    output:list of tuples (key,tokenized_candidate,vectorized_candidate,score)
     #output: (highest score and mention name) of the list of candidates
     '''
     sim_score = []
-    for can_processed, can_tokenized in zip(candidates_processed,candidates_tokenized):
+    for can_processed, can_tokenized, can_vectorized in zip(candidates_processed,candidates_tokenized,candidates_vectorized):
         sim = cosine_similarity_ngrams(mention,can_processed)
-        sim_score.append((key,can_tokenized,sim))
+        sim_score.append((key,can_tokenized,can_vectorized,sim))
     return sim_score
-    #return max(sim_score,key=lambda x:x[2])
 
 def generate_skipgram(w_or_v,n,s):
     '''
@@ -103,14 +103,15 @@ def cosine_similarity_ngrams(a, b):
         return 0.0
     return float(numerator) / denominator
 
-def generate_candidate(tokenized_mentions,dictionary_processed,dictionary_tokenized,n):
+def generate_candidate(tokenized_mentions,dictionary_processed,dictionary_tokenized,dictionary_vectorized,n):
     '''inputs:
           tokenized_mentions: list of lists (tokenized mentions)
                               e.g. corpus_tokenized_mentions
           dictionary_processed: skip-grammed dictionary terms
                       e.g. dictionary_processed
           dictionary_tokenized: tokenized dictionary
-       output: list of lists of n (key,tokenized candidate,score) tuples
+          dictionary_vectorized: vectorized dictionary
+       output: list of lists of n (key,tokenized candidate,vectorized candidate,score) tuples
        1. go through every tokenized mention
        2. turn each mention into skipgram
        3. compare with skip-grammed dictionary mention
@@ -123,9 +124,9 @@ def generate_candidate(tokenized_mentions,dictionary_processed,dictionary_tokeni
         candidates_list = []
         for key,allnames in dictionary_processed.items():
             term_tokenized = dictionary_tokenized[key]
-            candidates_list.extend(term_sim(key,mention_skipgram,allnames,term_tokenized))
-        candidates_list = sorted(candidates_list, key=lambda x: x[2],reverse=True)
-        
+            term_vectorized = dictionary_vectorized[key]
+            candidates_list.extend(term_sim(key,mention_skipgram,allnames,term_tokenized,term_vectorized))
+        candidates_list = sorted(candidates_list, key=lambda x: x[3],reverse=True)     
         generated_candidates.append(candidates_list[:n])
     return generated_candidates
 

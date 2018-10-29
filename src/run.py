@@ -66,12 +66,13 @@ logger.info('New shape: {0}'.format(corpus.padded.shape))
 logger.info('Loading dictionary...')
 dictionary = load.Terminology()
 dictionary.loaded = load.load(config['terminology']['dict_file'],'MEDIC')
-'''
+
 logger.info('Tokenizing and vectorizing dictionary terms...')
-dictionary.tokenized, dictionary.vectorized_np = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
+dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
 '''
 logger.info('Tokenizing dictionary terms...')
 dictionary.tokenized = vectorizer.MEDIC_dict_tokenizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
+'''
 
 #candidate generation
 import candidate_generation
@@ -79,29 +80,31 @@ logger.info('Generating candidates...')
 dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
 logger.info('Start generating candidates...')
 training_data = sample.Sample()
-training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,config.getint('candidate','n'))
-logger.info('Finished generating {0} candidates.'.format(len(corpus.tokenized_mentions)))
-logger.info('Formatting candidates...')
+logger.warning('Using only first 100 mentions!')
+#training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
+training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions[:100],dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
+logger.info('Finished generating {0} candidates.'.format(len(training_data.generated)))
 
 '''
 #save candidates / load previously generated candidates
-import tools
-tools.output_generated_candidates(config['settings']['gencan_file'],training_data.generated)
+import pickle
+with open(config['settings']['gencan_file'],'wb') as f:
+    pickle.dump(training_data.generated,f)
 logger.info('Saving generated candidates...')
 
-import tools
+import pickle
 training_data = sample.Sample()
-training_data.generated = tools.readin_generated_candidates(config['settings']['gencan_file'])
+training_data.generated = pickle.load(open(config['settings']['gencan_file'],'rb'))
 logger.info('Loading generated candidates...')
 '''
 
 #formatting generated candidates
-logger.warning('Using only first 100 mentions!')
-#change## training_data.mentions = sample.format_candidates(training_data.generated,corpus.mentions[:100],corpus.padded[:100])
+logger.info('Formatting candidates...')
+training_data.mentions = sample.format_candidates(training_data,corpus,dictionary.vectorized)
 
 #function parameters need updating
 #modify format_candidates to remove 100
-sample.format_candidates(training_data,corpus,dictionary.vectorized_np)
+sample.format_candidates(training_data,corpus,dictionary.vectorized)
 
 #debug previous line!
 
