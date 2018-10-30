@@ -15,6 +15,7 @@ class DataSet:
         self.tokenized_mentions = None
         self.vectorized_numpy_mentions = None
         self.padded = None
+        self.mention_ids = None
 
 class Sample:
     '''
@@ -28,6 +29,45 @@ class Sample:
         self.x = None
         self.y = None
         self.mentions = None
+
+def canonical_id_list(id_list,dictionary_loaded):
+    keys = dictionary_loaded.keys()
+    cache = [_canonical(_nor_id(ID),keys,dictionary_loaded) for ID in id_list]
+    return cache
+
+def _nor_id(ID):
+    '''
+    The NCBI corpus provides ids in a format where
+    MESH ids are in the form of 'DXXXXXX', whereas
+    OMIM ids are in the form of 'OMIM:XXXXXX'.
+    This function takes in a provided id STRING and
+    returns the id STRING in the format used as keys
+    in the control vocab.
+    '''
+    assert type(ID)==str
+    if 'OMIM' not in ID:
+        ID='MESH:'+ID.strip() #one single id had a space in front of it
+    return ID
+
+def _canonical(ID,keys,dictionary_loaded):
+    '''
+    This function takes in a provided id STRING and
+    returns the id STRING in the canonical form.
+    '''
+    assert type(ID)==str
+    cache = ID
+    cache_list = []
+    if ID not in keys:
+        for k, v in dictionary_loaded.items():
+            if ID in v.AllDiseaseIDs:
+                cache_list.append(k)
+        if len(cache_list) == 0:
+            logger.info('No canonical id found for {0}'.format(ID))
+            return cache
+        elif len(cache_list) > 1:
+            logger.warning('{0} candidates for non-canonical ID {1}!'.format(len(cache_list),ID))
+        cache = cache_list[0]
+    return cache
 
 def format_candidates(sample,cor_mens,vec_dict):
     '''
@@ -109,3 +149,25 @@ def _format_x(can_list,x_zero_np,vec_dict):
     logger.info('Padded shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_padded.shape,x_two_np.shape))
     x = [x_zero_np,x_one_padded,x_two_np]
     return x
+
+def check_candidates(sample,ground_truths):
+    '''
+    sample: generated candidates, sample object whose 'generated' attribute is a
+            list of tuples (id,tokenized_candidate,vectorized_candidate,score)
+    ground_truths: list of lists of ids
+
+    assigns list of numpy arrays of 0/1 to sample.y
+    '''
+    y = []
+    for cans, gt in zip(sample.generated,ground_truths):
+        for can in cans:
+            '''
+            can in format (id,tokenized_candidate,vectorized_candidate,score)
+            gt in format ['MESH:D003110', 'MESH:D009369'] (multiple)
+            '''
+            print('Can:',can[0],';\tGt:',gt)
+            if can[0] == gt[0]:
+                y.append(np.array([1]))
+            else:
+                y.append(np.array([0]))
+    sample.y = y

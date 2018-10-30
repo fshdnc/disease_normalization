@@ -43,25 +43,6 @@ logger.info('Preparing word embeddings...')
 vector_model, vocabulary, inversed_vocabulary = vectorizer.prepare_embedding_vocab('~/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin', binary = True, limit = 50000)
 pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model)
 
-#NCBI corpus
-##test NCBI corpus, the mentions are not separated by abstract
-#list of objects, '/home/lhchan/disease-normalization/data/ncbi-disease/NCBItestset_corpus.txt'
-logger.info('Loading NCBI corpus...')
-corpus = sample.DataSet()
-corpus.objects = load.load(config['corpus']['corpus_file'],'NCBI')
-#list of mentions
-#each mention has a docid and a sections, which contains title and abstract
-corpus.mentions = [mention.text for obj in corpus.objects for part in obj.sections for mention in part.mentions]
-logger.info('Tokenizing and vectorizing mentions...')
-corpus.tokenized_mentions, corpus.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus.mentions,config['methods']['tokenizer'])
-
-#padding for mentions
-from keras.preprocessing.sequence import pad_sequences
-logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
-corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
-#format of corpus.padded: numpy, mentions, padded
-logger.info('New shape: {0}'.format(corpus.padded.shape))
-
 #test MEDIC dictionary
 logger.info('Loading dictionary...')
 dictionary = load.Terminology()
@@ -73,6 +54,27 @@ dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_an
 logger.info('Tokenizing dictionary terms...')
 dictionary.tokenized = vectorizer.MEDIC_dict_tokenizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
 '''
+
+#NCBI corpus
+##test NCBI corpus, the mentions are not separated by abstract
+#list of objects, '/home/lhchan/disease-normalization/data/ncbi-disease/NCBItestset_corpus.txt'
+logger.info('Loading NCBI corpus...')
+corpus = sample.DataSet()
+corpus.objects = load.load(config['corpus']['corpus_file'],'NCBI')
+#list of mentions
+#each mention has a docid and a sections, which contains title and abstract
+corpus.mentions = [mention.text for obj in corpus.objects for part in obj.sections for mention in part.mentions]
+logger.info('Tokenizing and vectorizing mentions...')
+corpus.tokenized_mentions, corpus.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus.mentions,config['methods']['tokenizer'])
+logger.info('Formatting mention ids...')
+corpus.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded) for obj in corpus.objects for part in obj.sections for mention in part.mentions]
+
+#padding for mentions
+from keras.preprocessing.sequence import pad_sequences
+logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
+corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
+#format of corpus.padded: numpy, mentions, padded
+logger.info('New shape: {0}'.format(corpus.padded.shape))
 
 #candidate generation
 import candidate_generation
@@ -107,10 +109,16 @@ logger.info('Formatting candidates...')
 #modify format_candidates to remove 100
 sample.format_candidates(training_data,corpus,dictionary.vectorized)
 
-#debug previous line!
+#format y
+logger.info('Checking candidates...')
+#modify check_candidates to remove 100
+sample.check_candidates(training_data,corpus.mention_ids[:100])
 
 
 
+
+#>>> dictionary.loaded['MESH:D014314'].AllDiseaseIDs
+#('MESH:D014314', 'MESH:D000782', 'MESH:D058674')
 
 
 
@@ -119,8 +127,6 @@ for mention_vector, candidates in zip(corpus_vectorized_padded[:100],generated_c
 	
 
 '''
-
-
 
 
 """Things to note
