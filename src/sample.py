@@ -46,6 +46,7 @@ def format_candidates(sample,cor_mens,vec_dict):
     logger.debug('Seems fine up to here.')
     #sample.mentions, x_zero = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
     sample.x = _format_x(sample.generated,x_zero_np,vec_dict)
+    assert len(sample.x[0])==len(sample.x[1]) & len(sample.x[1])==len(sample.x[2])
 
 def _format_mentions_and_x0(can_list,men_list,men_padded):
     '''
@@ -63,7 +64,7 @@ def _format_mentions_and_x0(can_list,men_list,men_padded):
     assert len(can_list)==len(men_list) & len(men_list)==len(men_padded)
     for candidates, mention, padded_mention in zip(can_list,men_list,men_padded):
         can_number = len(candidates)
-        x_zero.append(padded_mention*can_number)
+        x_zero.extend([padded_mention]*can_number)
         end_index = start_index + can_number
         mentions.append((start_index, end_index, mention))
         start_index = end_index
@@ -88,64 +89,23 @@ def _format_x(can_list,x_zero_np,vec_dict):
     '''
     # x[1] = vectorized candidates
     x_one = []
-    #debug_count_noncan = 0
     # x[2] = candidate generation scores
     x_two = []
     logger.debug('Tokenized candidates not used for now, may be needed in the future.')
     #can_list>mention format: list of lists of n*(key,tokenized candidate,vectorized candidate,score)
     for mention in can_list:
         for candidate in mention:
-            x_one.append(candidate[2])
-            x_two.append(candidate[3])
-            #pass
-            '''
-            #debugging
-            for can_id, tok_can, score in candidate:
-                #x_one.append(vec_dict.get(can_id,_non_canonical(can_id)))
-                x_one.append(vec_dict[can_id])
-                #x_two.append(np.array([score]))
-                x_two.append([score])
-            '''
-    #logger.debug('{0} non-canonical forms used.'.format(debug_count_noncan))
+            x_one.append(np.array(candidate[2]))
+            x_two.append(np.array([candidate[3]]))
+    '''
+    Format of data at this point:
+    x_zero: len = 2000, nparray of nparrays, padded
+    x_one: len = 2000, list of nparrays, un-padded
+    x_two: len = 2000, list of nparrays, no need to be padded
+    '''
     logger.info('Padding...')
-    pad_len = len(max(x_one,key=len))
-    x_one_new = [mention+[0]*(pad_len-len(mention)) for mention in x_one]
-
-    logger.debug('Check 1. format of x_0 at this point (numpy? padded? 2. format2 of x_1, x_2')
-    import pdb; pdb.set_trace()
-
-    #------------------------------------
-    '''
-    #old padding before each candidate was changed to vectorized mention instead of vectorized AllNames
-    #pad x_one
-    flat_x_one = [item for sublist in x_one for item in sublist]
-    #get longest element
-    pad_len = len(max(flat_x_one,key=len))
-    x_one_new = [mention+[0]*(pad_len-len(mention)) for mention in x_one]
-    
-    #look for other ways of padding, ask Lenz/Kai for advice
-    #rewrite the padding, the above line doesn't work
-    '''
-    x_one_np = np.array(x_one_new)
+    x_one_padded = pad_sequences(np.array(x_one),padding='post',maxlen=len(max(x_one,key=len))) 
     x_two_np = np.array(x_two)
-    #import pdb; pdb.set_trace()
-    logger.info('Old shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_np.shape,x_two_np.shape))
-    x_zero_padded = pad_sequences(x_zero_np,padding='post', maxlen=len(max(x_zero_np,key=len)))
-    #complains here
-    x_one_padded = pad_sequences(x_one_np,padding='post')
-    #------------------------------------
-    x_two_padded = pad_sequences(x_two_np,padding='post')
-    logger.info('New shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_padded.shape,x_one_padded.shape,x_two_np.shape))
-    x = np.array([x_zero,x_one,x_two])
+    logger.info('Padded shape: x[0]: {0}, x[1]: {1}, x[2]: {2}.'.format(x_zero_np.shape,x_one_padded.shape,x_two_np.shape))
+    x = [x_zero_np,x_one_padded,x_two_np]
     return x
-
-'''
-#not needed for now because all id are supposed to be canonical
-#due to candidate_generation.generate_candidate function
-def _non_canonical(can_id):
-    assert can_id not in vec_dict
-    
-        debug_count_noncan += 1
-        return
-'''
-
