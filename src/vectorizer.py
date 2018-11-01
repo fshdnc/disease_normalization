@@ -18,6 +18,7 @@ def prepare_embedding_vocab(filename, binary = True, limit = 50000):
        5. Create an inverse dictionary
     '''
     vector_model = KeyedVectors.load_word2vec_format(filename, binary = binary, limit = limit)
+    #vector_model=KeyedVectors.load_word2vec_format(config['embedding']['emb_file'], binary=True, limit=50000)
     words = [k for k,v in sorted(vector_model.vocab.items(),key = lambda x:x[1].index)]
     vector_model.init_sims(replace = True)
     vocabulary={"<SPECIAL>": 0, "<OOV>": 1}
