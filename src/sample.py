@@ -170,4 +170,4 @@ def check_candidates(sample,ground_truths):
                 y.append(np.array([1]))
             else:
                 y.append(np.array([0]))
-    sample.y = y
+    sample.y = np.array(y)
