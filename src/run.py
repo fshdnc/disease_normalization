@@ -100,19 +100,17 @@ logger.info('Saving generated candidates...')
 import pickle
 training_data = sample.Sample()
 training_data.generated = pickle.load(open(config['settings']['gencan_file'],'rb'))
+#training_data.generated = pickle.load(open('gitig_generated_candidates_all.txt','rb'))
 logger.info('Loading generated candidates...')
 
 
 #formatting generated candidates
 logger.info('Formatting candidates...')
-#function parameters need updating
-#modify format_candidates to remove 100
 sample.format_candidates(training_data,corpus,dictionary.vectorized)
 
 #format y
 logger.info('Checking candidates...')
-#modify check_candidates to remove 100
-sample.check_candidates(training_data,corpus.mention_ids[:100])
+sample.check_candidates(training_data,corpus.mention_ids)
 
 
 

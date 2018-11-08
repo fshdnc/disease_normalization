@@ -81,10 +81,8 @@ def format_candidates(sample,cor_mens,vec_dict):
         vec_dict: vectorized controlled vocabulary
     '''
     logger.info('Formatting mentions...')
-    logger.warning('Modify next line afterwards')
-    sample.mentions, x_zero_np = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
-    logger.debug('Seems fine up to here.')
-    #sample.mentions, x_zero = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
+    sample.mentions, x_zero_np = _format_mentions_and_x0(sample.generated,cor_mens.mentions,cor_mens.padded)
+    #sample.mentions, x_zero_np = _format_mentions_and_x0(sample.generated,cor_mens.mentions[:100],cor_mens.padded[:100])
     sample.x = _format_x(sample.generated,x_zero_np,vec_dict)
     assert len(sample.x[0])==len(sample.x[1]) & len(sample.x[1])==len(sample.x[2])
 
@@ -165,7 +163,7 @@ def check_candidates(sample,ground_truths):
             can in format (id,tokenized_candidate,vectorized_candidate,score)
             gt in format ['MESH:D003110', 'MESH:D009369'] (multiple)
             '''
-            print('Can:',can[0],';\tGt:',gt)
+            #print('Can:',can[0],';\tGt:',gt)
             if can[0] == gt[0]:
                 y.append(np.array([1]))
             else:
