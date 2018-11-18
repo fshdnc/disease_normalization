@@ -40,7 +40,7 @@ logger.addHandler(stream_handler)
 
 #word embedding
 logger.info('Preparing word embeddings...')
-vector_model, vocabulary, inversed_vocabulary = vectorizer.prepare_embedding_vocab('~/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin', binary = True, limit = 50000)
+vector_model, vocabulary, inversed_vocabulary = vectorizer.prepare_embedding_vocab('~/old-disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin', binary = True, limit = 50000)
 pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model)
 
 #test MEDIC dictionary
