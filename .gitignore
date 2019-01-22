@@ -4,6 +4,7 @@ data/*
 
 #testing files and drafts
 gitig_*
+src/dis*
 
 ##directly copied from en-dash/disease-normalization
 # Large blobs

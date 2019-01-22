@@ -1,12 +1,17 @@
-
+#!/usr/bin/env python3
+# coding: utf8
 
 from keras.models import Model
 from keras.layers import Input, Embedding, Concatenate, Dense, Conv1D, GlobalMaxPooling1D, Flatten
 
+import logging
+logger = logging.getLogger(__name__)
+
 # needed input: vocabulary, pretrained, trainging_data
 
-for i in range(len(training_data.x)):
-    print('training_data.x[{0}]\tshape:{1}\tdtype:{2}'.format(i,training_data.x[i].shape,training_data.x[i].dtype))
+def print_input(training_data):
+    for i in range(len(training_data.x)):
+        logger.info('training_data.x[{0}]\tshape:{1}\tdtype:{2}'.format(i,training_data.x[i].shape,training_data.x[i].dtype))
 
 #  Remove the warning thrown (theano)
 #  Add Vsem layer (custom layer)
@@ -63,32 +68,37 @@ class semantic_similarity_layer(Layer):
         shape_m, shape_c = input_shape
         return (shape_m[0], 1)
 
-inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
-inp_scores = Input(shape=(training_data.x[2].shape[1],),dtype='float64', name='inp_scores')
+def build_model(conf,training_data,vocabulary,pretrained):
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    if int(conf['candidate']['use']):
+        inp_scores = Input(shape=(training_data.x[2].shape[1],),dtype='float64', name='inp_scores')
 
-embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
-encoded_mentions = embedding_layer(inp_mentions)
-encoded_candidates = embedding_layer(inp_candidates)
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    encoded_mentions = embedding_layer(inp_mentions)
+    encoded_candidates = embedding_layer(inp_candidates)
 
-conv_mentions = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
-conv_candidates = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
-pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
-pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+    conv_mentions = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
 
-v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
 
-join_layer = Concatenate()([pooled_mentions,pooled_candidates,inp_scores,v_sem])
-hidden_layer = Dense(64, activation='relu')(join_layer)
-prediction_layer = Dense(1,activation='sigmoid')(join_layer)
+    if int(conf['candidate']['use']):
+        join_layer = Concatenate()([pooled_mentions,pooled_candidates,inp_scores,v_sem])
+    else:
+        join_layer = Concatenate()([pooled_mentions,pooled_candidates,v_sem])
+    hidden_layer = Dense(64, activation='relu')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid')(join_layer)
 
-model = Model(inputs=[inp_mentions,inp_candidates,inp_scores], outputs=prediction_layer)
-model.compile(optimizer='adadelta', loss='binary_crossentropy')
+    if int(conf['candidate']['use']):
+        model = Model(inputs=[inp_mentions,inp_candidates,inp_scores], outputs=prediction_layer)
+    else:
+        model = Model(inputs=[inp_mentions,inp_candidates], outputs=prediction_layer)
+    model.compile(optimizer='adadelta', loss='binary_crossentropy')
 
-hist = model.fit(training_data.x, training_data.y, epochs=50, batch_size=100)
-#hist = model.fit(training_data.x, training_data.y, epochs=10, batch_size=100)
-# WARNING (theano.tensor.blas): We did not found a dynamic library into the library_dir of the library we use for blas. If you use ATLAS, make sure to compile it with dynamics library.
-
+    return model
 
 '''
 >>> model.summary()

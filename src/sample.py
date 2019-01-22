@@ -16,6 +16,7 @@ class DataSet:
         self.vectorized_numpy_mentions = None
         self.padded = None
         self.mention_ids = None
+        self.elmo = None
 
 class Sample:
     '''
@@ -169,3 +170,60 @@ def check_candidates(sample,ground_truths):
             else:
                 y.append(np.array([0]))
     sample.y = np.array(y)
+
+def no_cangen_format_x(mentions,candidates):
+    '''
+    Input:
+        mentions: list of list of padded mentions
+        candidates: list of list of padded candidates
+    [corpus.padded,len(corpus.padded)*[can_list.vectorized]
+    '''
+    can_no = len(candidates)
+    men_no = len(mentions)
+    x0 = [mention for mention in mentions for _ in range(can_no)]
+    x1 = [candidate for _ in range(men_no) for candidate in candidates]
+    assert len(x0)==len(x1)
+    from keras.preprocessing.sequence import pad_sequences
+    x0 = pad_sequences(x0,padding='post')
+    x1 = pad_sequences(x1,padding='post')
+    return [x0,x1]
+
+def no_cangen_format_mentions(mentions,can_no):
+    '''
+    Input:
+        mentions: list of mentions
+        can_no: no. of candidates
+    Output: list of (start,end,'mention')
+    '''
+    mention_list = []
+    start = 0
+    end = can_no
+    for mention in mentions:
+        mention_list.append((start,end,mention))
+        start = can_no + start
+        end = can_no + end
+    return mention_list
+
+def no_cangen_format_y(candidates,ground_truths):
+    '''
+    Input:
+        candidates:
+        ground_truths: list of lists of ids
+
+    returns list of numpy arrays of 0/1
+    '''
+    golds = [item for sublist in ground_truths for item in sublist]
+    y = [[1] if gold == can else [0] for gold in golds for can in candidates]
+    y_ = [item for sublist in y for item in sublist]
+    logger.debug('Total number of correct candidates: {0}'.format(sum(y_)))
+    return np.array(y)
+
+def load_no_cangen_data(pickled_objects,training_data,val_data):
+    '''
+    pickled_objects in the form of [[training_data.x,training_data.y,training_data.mentions],[val_data.x,val_data.y,val_data.mentions]]
+    '''
+    for pickled_object,data in zip(pickled_objects,[training_data,val_data]):
+        for o,d in zip(pickled_object,[data.x,data.y,data.mentions]):
+            d = o
+            #maybe use [:]?
+            import pdb; pdb.set_trace()

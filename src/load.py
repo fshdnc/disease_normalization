@@ -90,3 +90,5 @@ class Terminology:
         self.tokenized = None
         self.vectorized = None
         self.processed = None
+        self.no_cangen_tokenized = None
+        self.no_cangen_vectorized = None

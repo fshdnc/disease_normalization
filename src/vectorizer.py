@@ -178,3 +178,29 @@ import candidate_generation
 dictionary_processed = candidate_generation.process_MEDIC_dict(dictionary_tokenized,'skipgram')
 generated_candidates = candidate_generation.generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
 '''
+
+def MEDIC_dict_tokenizer_no_cangen(MEDIC_dict,tokenizer):
+    '''construct a new dictionary
+       key: canonical ID
+       value: tokenized disease name
+       e.g. original_dictionary[id].AllNames: ('1p36.33 deletion', 'Deletion 1p36.33')
+            tokenized_dictionary[id]: [['1p36.33', 'deletion'], ['deletion', '1p36.33']]
+       input MEDIC_dict value: (DiseaseID,DiseaseName,AllDiseaseIDs,AllNames)
+    '''
+    dictionary_tokenized={}
+    for i,j in MEDIC_dict.items():
+        dictionary_tokenized[i] = tok(j.DiseaseName.lower(),'nltk')
+    return dictionary_tokenized
+
+def MEDIC_dict_vectorizer_no_cangen(tokenized_dict,vocabulary):
+    '''construct a new dictionary
+       key: canonical ID
+       value: list vectorized disease name
+       e.g. original_dictionary[id].AllNames: ('1p36.33 deletion', 'Deletion 1p36.33')
+            tokenized_dictionary[id]: [['1p36.33', 'deletion'], ['deletion', '1p36.33']]
+            #vectorized_dictionary_np[id]: numpy.array([[1, 1445], [1445, 1]])
+    '''
+    dictionary_vectorized = {}
+    for i,j in tokenized_dict.items():
+        dictionary_vectorized[i] = [vocabulary.get(token,1) for token in j]        
+    return dictionary_vectorized

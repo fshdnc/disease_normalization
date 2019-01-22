@@ -133,3 +133,31 @@ def generate_candidate(tokenized_mentions,dictionary_processed,dictionary_tokeni
 #generate_candidate(corpus_tokenized_mentions,dictionary_processed,20)
 
 #print(token,inversed_vocabulary[token],KeyedVectors.word_vec(vector_model,inversed_vocabulary[token]))
+
+class Candidates:
+    '''
+    object for candidates in lists
+    '''
+    def __init__(self):
+        self.keys = None
+        self.canonical = None
+        self.tokenized = None
+        self.vectorized = None
+        self.elmo = None
+
+def all_candidates(candidate_obj,dictionary_tokenized,dictionary_vectorized,dictionary_elmo = None):
+    '''modified from generate_candidate
+          inputs:
+          tokenized_mentions: list of lists (tokenized mentions)
+                              e.g. corpus_tokenized_mentions
+          dictionary_tokenized: tokenized dictionary
+          dictionary_vectorized: vectorized dictionary
+       output: list of n (key,tokenized candidate,vectorized candidate) tuples
+    '''
+    candidate_obj.keys = [key for key,toknames in dictionary_tokenized.items()]
+    candidate_obj.tokenized = [dictionary_tokenized[key] for key in candidate_obj.keys]
+    candidate_obj.vectorized = [dictionary_vectorized[key] for key in candidate_obj.keys]
+    from keras.preprocessing.sequence import pad_sequences
+    candidate_obj.vectorized =pad_sequences(candidate_obj.vectorized,padding='post')
+    if dictionary_elmo:
+        candidate_obj.elmo = [dictionary_elmo[key] for key in candidate_obj.keys]

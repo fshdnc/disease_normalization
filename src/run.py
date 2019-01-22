@@ -47,73 +47,161 @@ pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model
 logger.info('Loading dictionary...')
 dictionary = load.Terminology()
 dictionary.loaded = load.load(config['terminology']['dict_file'],'MEDIC')
-
+#import pdb; pdb.set_trace()
 logger.info('Tokenizing and vectorizing dictionary terms...')
-dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
-'''
-logger.info('Tokenizing dictionary terms...')
-dictionary.tokenized = vectorizer.MEDIC_dict_tokenizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
-'''
+if int(config['candidate']['use']):
+	dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
+	'''
+	logger.info('Tokenizing dictionary terms...')
+	dictionary.tokenized = vectorizer.MEDIC_dict_tokenizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
+	'''
+else:
+	dictionary.no_cangen_tokenized = vectorizer.MEDIC_dict_tokenizer_no_cangen(dictionary.loaded,config['methods']['tokenizer'])
+	dictionary.no_cangen_vectorized = vectorizer.MEDIC_dict_vectorizer_no_cangen(dictionary.no_cangen_tokenized,vocabulary)
 
 #NCBI corpus
 ##test NCBI corpus, the mentions are not separated by abstract
 #list of objects, '/home/lhchan/disease-normalization/data/ncbi-disease/NCBItestset_corpus.txt'
-logger.info('Loading NCBI corpus...')
-corpus = sample.DataSet()
-corpus.objects = load.load(config['corpus']['corpus_file'],'NCBI')
+logger.info('Loading NCBI training corpus...')
+corpus_train = sample.DataSet()
+corpus_train.objects = load.load(config['corpus']['training_file'],'NCBI')
 #list of mentions
 #each mention has a docid and a sections, which contains title and abstract
-corpus.mentions = [mention.text for obj in corpus.objects for part in obj.sections for mention in part.mentions]
-logger.info('Tokenizing and vectorizing mentions...')
-corpus.tokenized_mentions, corpus.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus.mentions,config['methods']['tokenizer'])
-logger.info('Formatting mention ids...')
-corpus.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded) for obj in corpus.objects for part in obj.sections for mention in part.mentions]
+corpus_train.mentions = [mention.text for obj in corpus_train.objects for part in obj.sections for mention in part.mentions]
+logger.info('Tokenizing and vectorizing training mentions...')
+corpus_train.tokenized_mentions, corpus_train.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_train.mentions,config['methods']['tokenizer'])
+logger.info('Formatting training mention ids...')
+corpus_train.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded) for obj in corpus_train.objects for part in obj.sections for mention in part.mentions]
+
+# development set
+logger.info('Loading NCBI development corpus...')
+corpus_dev = sample.DataSet()
+corpus_dev.objects = load.load(config['corpus']['development_file'],'NCBI')
+#list of mentions
+#each mention has a docid and a sections, which contains title and abstract
+corpus_dev.mentions = [mention.text for obj in corpus_dev.objects for part in obj.sections for mention in part.mentions]
+logger.info('Tokenizing and vectorizing test mentions...')
+corpus_dev.tokenized_mentions, corpus_dev.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_dev.mentions,config['methods']['tokenizer'])
+logger.info('Formatting test mention ids...')
+corpus_dev.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded) for obj in corpus_dev.objects for part in obj.sections for mention in part.mentions]
+
 
 #padding for mentions
 from keras.preprocessing.sequence import pad_sequences
-logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
-corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
-#format of corpus.padded: numpy, mentions, padded
-logger.info('New shape: {0}'.format(corpus.padded.shape))
-
-#candidate generation
-import candidate_generation
-'''
-logger.info('Generating candidates...')
-dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
-logger.info('Start generating candidates...')
-training_data = sample.Sample()
-logger.warning('Using only first 100 mentions!')
-#training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
-training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions[:100],dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
-logger.info('Finished generating {0} candidates.'.format(len(training_data.generated)))
-'''
-
-'''
-#save candidates / load previously generated candidates
-import pickle
-with open(config['settings']['gencan_file'],'wb') as f:
-    pickle.dump(training_data.generated,f)
-
-logger.info('Saving generated candidates...')
-'''
-import pickle
-training_data = sample.Sample()
-training_data.generated = pickle.load(open(config['settings']['gencan_file'],'rb'))
-#training_data.generated = pickle.load(open('gitig_generated_candidates_all.txt','rb'))
-logger.info('Loading generated candidates...')
+for corpus in [corpus_train,corpus_dev]:
+	logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
+	corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
+	#format of corpus.padded: numpy, mentions, padded
+	logger.info('New shape: {0}'.format(corpus.padded.shape))
 
 
-#formatting generated candidates
-logger.info('Formatting candidates...')
-sample.format_candidates(training_data,corpus,dictionary.vectorized)
+if int(config['candidate']['use']): # if can_gen is used
+#training set, candidate generation
+	logger.info('Using candidate generation...')
+	import candidate_generation
 
-#format y
-logger.info('Checking candidates...')
-sample.check_candidates(training_data,corpus.mention_ids)
+	'''
+	logger.info('Generating candidates...')
+	dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
+	logger.info('Start generating candidates...')
+	training_data = sample.Sample()
+	logger.warning('Using only first 100 mentions!')
+	#training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
+	training_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions[:100],dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
+	logger.info('Finished generating {0} candidates.'.format(len(training_data.generated)))
+	'''
+
+	'''
+	#save candidates / load previously generated candidates
+	import pickle
+	with open(config['settings']['gencan_file'],'wb') as f:
+	    pickle.dump(training_data.generated,f)
+
+	logger.info('Saving generated candidates...')
+	'''
+	import pickle
+	training_data = sample.Sample()
+	training_data.generated = pickle.load(open(config['settings']['gencan_file_train'],'rb'))
+	#training_data.generated = pickle.load(open('gitig_generated_candidates_all.txt','rb'))
+	logger.info('Loading generated candidates...')
+
+	#formatting generated candidates
+	logger.info('Formatting candidates...')
+	sample.format_candidates(training_data,corpus_train,dictionary.vectorized)
+
+	#format y
+	logger.info('Checking candidates...')
+	sample.check_candidates(training_data,corpus_train.mention_ids)
+	
+# validation set
+	logger.info('Candidate generation for validation set...')
+	if not dictionary.processed:
+		dictionary.processed = candidate_generation.process_MEDIC_dict(dictionary.tokenized,config['methods']['candidate_generation'])
+	val_data = sample.Sample()
+	'''
+	val_data.generated = candidate_generation.generate_candidate(corpus.tokenized_mentions,dictionary.processed,dictionary.tokenized,dictionary.vectorized,config.getint('candidate','n'))
+	logger.info('Finished generating {0} candidates for the validation set.'.format(len(training_data.generated)))
+	# save generated candidates for the development set
+	import pickle
+	with open(config['settings']['gencan_file_dev'],'wb') as f:
+	    pickle.dump(val_data.generated,f)
+	logger.info('Saving generated candidates for tge validation set...')
+	'''
+	import pickle
+	val_data.generated = pickle.load(open(config['settings']['gencan_file_dev'],'rb'))
+	sample.format_candidates(val_data,corpus_dev,dictionary.vectorized)
+	import pdb; pdb.set_trace()
+	sample.check_candidates(val_data,corpus_dev.mention_ids)
+else: #try not to use candidates
+	logger.info('Not using candidate generation...')
+	if not int(config['settings']['use_saved_data_no_cangen']):
+		training_data = sample.Sample()
+		val_data = sample.Sample()
+
+		import candidate_generation
+		can_list = candidate_generation.Candidates()
+		# assign lists to can_list
+		candidate_generation.all_candidates(can_list,dictionary.no_cangen_tokenized,dictionary.no_cangen_vectorized)
+		can_list.canonical = [sample._canonical(key,dictionary.loaded.keys(),dictionary.loaded) for key in can_list.keys]
+		
+		logger.info('Formatting CNN inputs...')
+		logger.warning('Not formatting Data.generated.')
+		for corpus, data in zip([corpus_train,corpus_dev],[training_data,val_data]):
+			data.x = sample.no_cangen_format_x(corpus.padded,can_list.vectorized)
+			data.mentions = sample.no_cangen_format_mentions(corpus.mentions,len(can_list.vectorized))
+			data.y = sample.no_cangen_format_y(can_list.canonical,corpus.mention_ids)
+		#import pdb; pdb.set_trace()
+		#debug can_list.canonical==can_list.keys True
+
+		import pickle
+		data = [[training_data.x,training_data.y,training_data.mentions],[val_data.x,val_data.y,val_data.mentions]]
+		with open(config['settings']['data_no_cangen'],'wb') as f:
+			pickle.dump(data,f,protocol=4)
+		logger.info('Training and validation inputs saved.')
+	else:
+		logger.info('Loading pre-saved formatted data for CNN input.')
+		logger.warning('Not creating candidate_generation.Candidates() object.')
+		import pickle
+		data = pickle.load(open(config['settings']['data_no_cangen'],'rb'))
+		training_data = sample.Sample()
+		val_data = sample.Sample()
+		sample.load_no_cangen_data(data,training_data,val_data)
 
 
-
+if not int(config['candidate']['use']):	    
+	import cnn, model
+	cnn.print_input(training_data)
+	model = cnn.build_model(config,training_data,vocabulary,pretrained)
+	import pdb; pdb.set_trace()
+	hist = model.fit(training_data.x, training_data.y, epochs=20, batch_size=100)
+	#hist = model.fit(training_data.x, training_data.y, epochs=10, batch_size=100)
+	# WARNING (theano.tensor.blas): We did not found a dynamic library into the library_dir of the library we use for blas. If you use ATLAS, make sure to compile it with dynamics library.
+	model.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
+else:
+	import model
+	model = model.load_model(config['model']['path_model_architecture'],config['model']['path_model_weights'])
+	model.compile(optimizer='adadelta',loss='binary_crossentropy')
+	test_y = model.predict()
 
 #>>> dictionary.loaded['MESH:D014314'].AllDiseaseIDs
 #('MESH:D014314', 'MESH:D000782', 'MESH:D058674')
