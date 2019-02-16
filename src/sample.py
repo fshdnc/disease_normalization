@@ -183,6 +183,7 @@ def no_cangen_format_x(mentions,candidates):
     x0 = [mention for mention in mentions for _ in range(can_no)]
     x1 = [candidate for _ in range(men_no) for candidate in candidates]
     assert len(x0)==len(x1)
+    logger.info('{0} of candidate-mention pairs generated'.format(len(x1)))
     from keras.preprocessing.sequence import pad_sequences
     x0 = pad_sequences(x0,padding='post')
     x1 = pad_sequences(x1,padding='post')
@@ -212,7 +213,8 @@ def no_cangen_format_y(candidates,ground_truths):
 
     returns list of numpy arrays of 0/1
     '''
-    golds = [item for sublist in ground_truths for item in sublist]
+    # golds = [item for sublist in ground_truths for item in sublist]
+    golds = [sublist[0] for sublist in ground_truths]
     y = [[1] if gold == can else [0] for gold in golds for can in candidates]
     y_ = [item for sublist in y for item in sublist]
     logger.debug('Total number of correct candidates: {0}'.format(sum(y_)))
@@ -222,8 +224,14 @@ def load_no_cangen_data(pickled_objects,training_data,val_data):
     '''
     pickled_objects in the form of [[training_data.x,training_data.y,training_data.mentions],[val_data.x,val_data.y,val_data.mentions]]
     '''
+    training_data.x = pickled_objects[0][0]
+    training_data.y = pickled_objects[0][1]
+    training_data.mentions = pickled_objects[0][2]
+    val_data.x = pickled_objects[1][0]
+    val_data.y = pickled_objects[1][1]
+    val_data.mentions = pickled_objects[1][2]
+    '''# did not work, could not assign
     for pickled_object,data in zip(pickled_objects,[training_data,val_data]):
         for o,d in zip(pickled_object,[data.x,data.y,data.mentions]):
-            d = o
-            #maybe use [:]?
-            import pdb; pdb.set_trace()
+            d = o[:]
+    '''

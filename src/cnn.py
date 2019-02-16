@@ -68,6 +68,13 @@ class semantic_similarity_layer(Layer):
         shape_m, shape_c = input_shape
         return (shape_m[0], 1)
 
+    def get_config(self):
+        config = {'batch_input_shape': self.batch_input_shape,
+                  'dtype': self.dtype,
+                  'sparse': self.sparse,
+                  'name': self.name}
+        return config
+
 def build_model(conf,training_data,vocabulary,pretrained):
     inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')

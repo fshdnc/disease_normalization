@@ -90,7 +90,7 @@ corpus_dev.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded)
 from keras.preprocessing.sequence import pad_sequences
 for corpus in [corpus_train,corpus_dev]:
 	logger.info('Old shape: {0}'.format(corpus.vectorized_numpy_mentions.shape))
-	corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post')
+	corpus.padded = pad_sequences(corpus.vectorized_numpy_mentions, padding='post', maxlen=int(config['embedding']['length']))
 	#format of corpus.padded: numpy, mentions, padded
 	logger.info('New shape: {0}'.format(corpus.padded.shape))
 
@@ -150,7 +150,7 @@ if int(config['candidate']['use']): # if can_gen is used
 	import pickle
 	val_data.generated = pickle.load(open(config['settings']['gencan_file_dev'],'rb'))
 	sample.format_candidates(val_data,corpus_dev,dictionary.vectorized)
-	import pdb; pdb.set_trace()
+	#import pdb; pdb.set_trace()
 	sample.check_candidates(val_data,corpus_dev.mention_ids)
 else: #try not to use candidates
 	logger.info('Not using candidate generation...')
@@ -170,7 +170,9 @@ else: #try not to use candidates
 			data.x = sample.no_cangen_format_x(corpus.padded,can_list.vectorized)
 			data.mentions = sample.no_cangen_format_mentions(corpus.mentions,len(can_list.vectorized))
 			data.y = sample.no_cangen_format_y(can_list.canonical,corpus.mention_ids)
+			assert len(data.x[0]) == len(data.y)
 		#import pdb; pdb.set_trace()
+		# debug len(data.x[0])!=len(data.y)
 		#debug can_list.canonical==can_list.keys True
 
 		import pickle
@@ -188,25 +190,49 @@ else: #try not to use candidates
 		sample.load_no_cangen_data(data,training_data,val_data)
 
 
-if not int(config['candidate']['use']):	    
-	import cnn, model
+if not int(config['model']['use_saved_model']):	   # train new model
+	import cnn, model_tools
 	cnn.print_input(training_data)
 	model = cnn.build_model(config,training_data,vocabulary,pretrained)
-	import pdb; pdb.set_trace()
-	hist = model.fit(training_data.x, training_data.y, epochs=20, batch_size=100)
+	hist = model.fit(training_data.x, training_data.y, epochs=1, batch_size=100)
 	#hist = model.fit(training_data.x, training_data.y, epochs=10, batch_size=100)
 	# WARNING (theano.tensor.blas): We did not found a dynamic library into the library_dir of the library we use for blas. If you use ATLAS, make sure to compile it with dynamics library.
-	model.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
+	logger.info('Saving newly trained model...')
+	model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
 else:
-	import model
-	model = model.load_model(config['model']['path_model_architecture'],config['model']['path_model_weights'])
+	from cnn import semantic_similarity_layer
+	import cnn, model_tools
+	model = model_tools.load_model(config['model']['path_model_architecture'],config['model']['path_model_weights'],{'semantic_similarity_layer': semantic_similarity_layer})
 	model.compile(optimizer='adadelta',loss='binary_crossentropy')
-	test_y = model.predict()
+
+# predictions
+if int(config['settings']['predict']):
+	logger.info('Making predictions...')
+	test_y = model.predict(val_data.x)
+	if int(config['settings']['save_prediction']):
+		logger.info('Saving predictions to {0}'.format(config['model']['path_saved_predictions']))
+		model_tools.save_predictions(config['model']['path_saved_predictions'],test_y) #(filename,predictions)
+
+if int(config['settings']['load_prediction']):
+	logger.info('Loading predictions from {0}'.format(config['settings']['path_saved_predictions']))
+	import pickle
+	test_y = pickle.load(open(config['settings']['path_saved_predictions'],'rb'))
+
+# evaluations
+correct = 0
+for start, end, untok_mention in val_data.mentions:
+	index_prediction = np.argmax(test_y[start:end],axis=0)
+	index_gold = np.argmax(val_data.y[start:end],axis=0)
+	if index_prediction == index_gold:
+		correct += 1
+logger.info('Accuracy: {0}, Correct: {1}, Total: {2}'.format(correct/len(val_data.mentions),correct,len(val_data.mentions)))
+
+
+
+# 	import pdb; pdb.set_trace()
 
 #>>> dictionary.loaded['MESH:D014314'].AllDiseaseIDs
 #('MESH:D014314', 'MESH:D000782', 'MESH:D058674')
-
-
 
 '''
 for mention_vector, candidates in zip(corpus_vectorized_padded[:100],generated_candidates):
