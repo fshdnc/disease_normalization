@@ -87,6 +87,8 @@ def _load_MEDIC(filename):
 class Terminology:
     def __init__(self):
         self.loaded = None
+        self.untokenized = None
+        self.untokenized_all = None
         self.tokenized = None
         self.vectorized = None
         self.processed = None

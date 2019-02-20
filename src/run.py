@@ -1,9 +1,11 @@
+import logging
+import logging.config
+
 import vectorizer
 import load
 import sample
 import configparser as cp
 import args
-import logging
 import numpy as np
 
 #configurations
@@ -18,16 +20,32 @@ False
 '''
 
 #logging
-'''
-#incorporate this into the rest somehow
-def main():
-    import logging.congig
-    logging.config.fileConfig('/path/to/logging.conf')
-
-if __name__ == '__main__':
-	main
-'''
 logger = logging.getLogger(__name__)
+logging.config.dictConfig({
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        },
+    },
+    'handlers': {
+        'default': {
+            'level':'INFO',
+            'formatter': 'standard',
+            'class':'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        '': {
+            'handlers': ['default'],
+            'level': 'INFO',
+            'propagate': True
+        }
+    }
+})
+
+'''
 logger.setLevel(config.getint('settings','logging_level'))
 formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
 file_handler = logging.FileHandler(config['settings']['logging_filename'])
@@ -37,6 +55,7 @@ stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
+'''
 
 #word embedding
 logger.info('Preparing word embeddings...')
@@ -47,7 +66,6 @@ pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model
 logger.info('Loading dictionary...')
 dictionary = load.Terminology()
 dictionary.loaded = load.load(config['terminology']['dict_file'],'MEDIC')
-#import pdb; pdb.set_trace()
 logger.info('Tokenizing and vectorizing dictionary terms...')
 if int(config['candidate']['use']):
 	dictionary.tokenized, dictionary.vectorized = vectorizer.MEDIC_dict_tokenizer_and_vectorizer(dictionary.loaded,config['methods']['tokenizer'],vocabulary)
@@ -71,7 +89,9 @@ corpus_train.mentions = [mention.text for obj in corpus_train.objects for part i
 logger.info('Tokenizing and vectorizing training mentions...')
 corpus_train.tokenized_mentions, corpus_train.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_train.mentions,config['methods']['tokenizer'])
 logger.info('Formatting training mention ids...')
-corpus_train.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded) for obj in corpus_train.objects for part in obj.sections for mention in part.mentions]
+no_canonical_id_found = []
+corpus_train.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded,no_canonical_id_found) for obj in corpus_train.objects for part in obj.sections for mention in part.mentions]
+logger.info('Training set: No canonical id found for: '+'; '.join(set(no_canonical_id_found)))
 
 # development set
 logger.info('Loading NCBI development corpus...')
@@ -83,8 +103,9 @@ corpus_dev.mentions = [mention.text for obj in corpus_dev.objects for part in ob
 logger.info('Tokenizing and vectorizing test mentions...')
 corpus_dev.tokenized_mentions, corpus_dev.vectorized_numpy_mentions = vectorizer.NCBI_tokenizer_and_vectorizer(vocabulary,corpus_dev.mentions,config['methods']['tokenizer'])
 logger.info('Formatting test mention ids...')
-corpus_dev.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded) for obj in corpus_dev.objects for part in obj.sections for mention in part.mentions]
-
+no_canonical_id_found = []
+corpus_dev.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded,no_canonical_id_found) for obj in corpus_dev.objects for part in obj.sections for mention in part.mentions]
+logger.info('Test set: No canonical id found for: '+'; '.join(set(no_canonical_id_found)))
 
 #padding for mentions
 from keras.preprocessing.sequence import pad_sequences
@@ -152,9 +173,21 @@ if int(config['candidate']['use']): # if can_gen is used
 	sample.format_candidates(val_data,corpus_dev,dictionary.vectorized)
 	#import pdb; pdb.set_trace()
 	sample.check_candidates(val_data,corpus_dev.mention_ids)
-else: #try not to use candidates
+else: #not using candidates
 	logger.info('Not using candidate generation...')
-	if not int(config['settings']['use_saved_data_no_cangen']):
+	try:
+		logger.info('Loading pre-saved formatted data for CNN input.')
+		logger.warning('Not creating candidate_generation.Candidates() object.')
+		import pickle
+		data = pickle.load(open(config['settings']['data_no_cangen'],'rb'))
+		training_data = sample.Sample()
+		val_data = sample.Sample()
+		sample.load_no_cangen_data(data,training_data,val_data)
+		# need can_list for elmo
+		import candidate_generation
+		can_list = candidate_generation.Candidates()
+	except IOError:
+	#if not int(config['settings']['use_saved_data_no_cangen']):
 		training_data = sample.Sample()
 		val_data = sample.Sample()
 
@@ -162,10 +195,13 @@ else: #try not to use candidates
 		can_list = candidate_generation.Candidates()
 		# assign lists to can_list
 		candidate_generation.all_candidates(can_list,dictionary.no_cangen_tokenized,dictionary.no_cangen_vectorized)
-		can_list.canonical = [sample._canonical(key,dictionary.loaded.keys(),dictionary.loaded) for key in can_list.keys]
-		
+		no_canonical_id_found = []
+		can_list.canonical = [sample._canonical(key,dictionary.loaded.keys(),dictionary.loaded,no_canonical_id_found) for key in can_list.keys]
+		logger.info('Training set: No canonical id found for: '+'; '.join(set(no_canonical_id_found)))
+
 		logger.info('Formatting CNN inputs...')
 		logger.warning('Not formatting Data.generated.')
+
 		for corpus, data in zip([corpus_train,corpus_dev],[training_data,val_data]):
 			data.x = sample.no_cangen_format_x(corpus.padded,can_list.vectorized)
 			data.mentions = sample.no_cangen_format_mentions(corpus.mentions,len(can_list.vectorized))
@@ -180,22 +216,40 @@ else: #try not to use candidates
 		with open(config['settings']['data_no_cangen'],'wb') as f:
 			pickle.dump(data,f,protocol=4)
 		logger.info('Training and validation inputs saved.')
-	else:
-		logger.info('Loading pre-saved formatted data for CNN input.')
-		logger.warning('Not creating candidate_generation.Candidates() object.')
-		import pickle
-		data = pickle.load(open(config['settings']['data_no_cangen'],'rb'))
-		training_data = sample.Sample()
-		val_data = sample.Sample()
-		sample.load_no_cangen_data(data,training_data,val_data)
 
+if config.getint('embedding','elmo'): # using elmo
+	import vectorizer_elmo
+	try:
+		import pickle
+		[corpus_train.elmo, corpus_dev.elmo, can_list.elmo] = pickle.load(open(config['embedding']['cache_elmo_emb'],'rb'))
+	except IOError:
+		logging.info('Generating elmo embedding...')
+		if not config.getint('embedding','can_allnames'):
+			dictionary.untokenized = vectorizer.MEDIC_dict_untokenized(dictionary.loaded,0)
+			can_list.untokenized = [dictionary.untokenized[can] for can in can_list.canonical]
+		else:
+			dictionary.untokenized_all = vectorizer.MEDIC_dict_untokenized(dictionary.loaded,1)
+			can_list.untokenized_all = [dictionary.untokenized_all[can] for can in can_list.canonical]
+			raise NotImplementedError('Allnames elmo not implemented. Each candidate is a list of names instead of a string.')
+		[corpus_train.elmo, corpus_dev.elmo, can_list.elmo] = [chunk for chunk in vectorizer_elmo.elmo_default([corpus_train.mentions,corpus_dev.mentions,can_list.untokenized])]
+		import pickle
+		data = [corpus_train.elmo, corpus_dev.elmo, can_list.elmo]
+		with open(config['embedding']['cache_elmo_emb'],'wb') as f:
+			pickle.dump(data,f,protocol=4)
+		logger.info('Elmo embedding for mentions and candidates saved.')
+	for corpus, data in zip([corpus_train,corpus_dev],[training_data,val_data]):
+		data.x.extend(vectorizer_elmo.elmo_format_x(corpus.elmo,can_list.elmo))
 
 if not int(config['model']['use_saved_model']):	   # train new model
 	import cnn, model_tools
+	from callback import EarlyStoppingRankingAccuracy
+	evaluation_function = EarlyStoppingRankingAccuracy(config,val_data)
 	cnn.print_input(training_data)
 	model = cnn.build_model(config,training_data,vocabulary,pretrained)
-	hist = model.fit(training_data.x, training_data.y, epochs=1, batch_size=100)
-	#hist = model.fit(training_data.x, training_data.y, epochs=10, batch_size=100)
+	logger.warning('Using truncated data!')
+	fake_data_x = [training_data.x[0][:10000],training_data.x[1][:10000]]
+	hist = model.fit(fake_data_x, training_data.y[:10000], epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+	#hist = model.fit(training_data.x, training_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
 	# WARNING (theano.tensor.blas): We did not found a dynamic library into the library_dir of the library we use for blas. If you use ATLAS, make sure to compile it with dynamics library.
 	logger.info('Saving newly trained model...')
 	model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
@@ -205,31 +259,7 @@ else:
 	model = model_tools.load_model(config['model']['path_model_architecture'],config['model']['path_model_weights'],{'semantic_similarity_layer': semantic_similarity_layer})
 	model.compile(optimizer='adadelta',loss='binary_crossentropy')
 
-# predictions
-if int(config['settings']['predict']):
-	logger.info('Making predictions...')
-	test_y = model.predict(val_data.x)
-	if int(config['settings']['save_prediction']):
-		logger.info('Saving predictions to {0}'.format(config['model']['path_saved_predictions']))
-		model_tools.save_predictions(config['model']['path_saved_predictions'],test_y) #(filename,predictions)
 
-if int(config['settings']['load_prediction']):
-	logger.info('Loading predictions from {0}'.format(config['settings']['path_saved_predictions']))
-	import pickle
-	test_y = pickle.load(open(config['settings']['path_saved_predictions'],'rb'))
-
-# evaluations
-correct = 0
-for start, end, untok_mention in val_data.mentions:
-	index_prediction = np.argmax(test_y[start:end],axis=0)
-	index_gold = np.argmax(val_data.y[start:end],axis=0)
-	if index_prediction == index_gold:
-		correct += 1
-logger.info('Accuracy: {0}, Correct: {1}, Total: {2}'.format(correct/len(val_data.mentions),correct,len(val_data.mentions)))
-
-
-
-# 	import pdb; pdb.set_trace()
 
 #>>> dictionary.loaded['MESH:D014314'].AllDiseaseIDs
 #('MESH:D014314', 'MESH:D000782', 'MESH:D058674')

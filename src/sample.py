@@ -31,9 +31,9 @@ class Sample:
         self.y = None
         self.mentions = None
 
-def canonical_id_list(id_list,dictionary_loaded):
+def canonical_id_list(id_list,dictionary_loaded,no_id_list):
     keys = dictionary_loaded.keys()
-    cache = [_canonical(_nor_id(ID),keys,dictionary_loaded) for ID in id_list]
+    cache = [_canonical(_nor_id(ID),keys,dictionary_loaded,no_id_list) for ID in id_list]
     return cache
 
 def _nor_id(ID):
@@ -50,7 +50,7 @@ def _nor_id(ID):
         ID='MESH:'+ID.strip() #one single id had a space in front of it
     return ID
 
-def _canonical(ID,keys,dictionary_loaded):
+def _canonical(ID,keys,dictionary_loaded,no_id_list):
     '''
     This function takes in a provided id STRING and
     returns the id STRING in the canonical form.
@@ -63,7 +63,7 @@ def _canonical(ID,keys,dictionary_loaded):
             if ID in v.AllDiseaseIDs:
                 cache_list.append(k)
         if len(cache_list) == 0:
-            logger.info('No canonical id found for {0}'.format(ID))
+            no_id_list.append(str(ID))
             return cache
         elif len(cache_list) > 1:
             logger.warning('{0} candidates for non-canonical ID {1}!'.format(len(cache_list),ID))

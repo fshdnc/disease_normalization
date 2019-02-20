@@ -143,6 +143,8 @@ class Candidates:
         self.canonical = None
         self.tokenized = None
         self.vectorized = None
+        self.untokenized = None
+        self.untokenized_all = None
         self.elmo = None
 
 def all_candidates(candidate_obj,dictionary_tokenized,dictionary_vectorized,dictionary_elmo = None):
@@ -159,5 +161,6 @@ def all_candidates(candidate_obj,dictionary_tokenized,dictionary_vectorized,dict
     candidate_obj.vectorized = [dictionary_vectorized[key] for key in candidate_obj.keys]
     from keras.preprocessing.sequence import pad_sequences
     candidate_obj.vectorized =pad_sequences(candidate_obj.vectorized,padding='post')
+    # not using this part at all, written when previously tried to implement elmo but did not finish
     if dictionary_elmo:
         candidate_obj.elmo = [dictionary_elmo[key] for key in candidate_obj.keys]

@@ -204,3 +204,18 @@ def MEDIC_dict_vectorizer_no_cangen(tokenized_dict,vocabulary):
     for i,j in tokenized_dict.items():
         dictionary_vectorized[i] = [vocabulary.get(token,1) for token in j]        
     return dictionary_vectorized
+
+def MEDIC_dict_untokenized(MEDIC_dict,allnames):
+    '''construct a new dictionary
+       key: canonical ID
+       value: untokenized disease name, either (1) only canonical name (string) or (2) list of all names
+    '''
+    dictionary={}
+    if not allnames: # use only the canonical name
+        for i,j in MEDIC_dict.items():
+            dictionary[i] = j.DiseaseName
+    else:
+        for i,j in MEDIC_dict.items():
+            dictionary[i] = list(j.AllNames)
+            assert len(dictionary[i]) == len(j.AllNames)
+    return dictionary

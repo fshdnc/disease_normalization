@@ -33,7 +33,7 @@ def parse_MEDIC_dictionary(filename):
 	with open(filename,'r') as f:
 		for line in f:
 			if not line.startswith("#"):
-				DiseaseName, DiseaseID, _, _, AltDiseaseIDs, _, _, Synonyms = line.strip('\n').split('\t')
+				DiseaseName, DiseaseID, AltDiseaseIDs, Def, _, _, _, Synonyms = line.strip('\n').split('\t')
 				AllDiseaseIDs = tuple([DiseaseID]+AltDiseaseIDs.split('|')) if AltDiseaseIDs else tuple([DiseaseID])
 				AllNames = tuple([DiseaseName]+Synonyms.split('|')) if Synonyms else tuple([DiseaseName])
 				entry = MEDIC_ENTRY(DiseaseID,DiseaseName,AllDiseaseIDs,AllNames)
