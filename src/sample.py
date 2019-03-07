@@ -51,37 +51,8 @@ class NewDataSet:
         self.vectorize = None # numpy array
         self.all = None # dict
 
-    '''
-    def get_pickle(self):
-        ls = [item for item in [self.ids, self.names, self.map, self.padded, self.elmo, self.all, self.all_ids] if item is not None]
-        for n,item in enumerate([self.ids, self.names, self.map, self.padded, self.elmo, self.all, self.all_ids]):
-            if item is not None:
-                print(n)
-        # only ids, names, map, and all gets pickled for some reason
-        import pdb;pdb.set_trace()
-        return ls
-    '''
-
     def info(self):
         return self.info
-
-    '''
-    def read_pickle_concept(self,l):
-        self.ids = l[0]
-        self.names = l[1]
-        self.map = l[2]
-        self.padded = l[3]
-        self.elmo = l[4]
-        self.all = l[5]
-        self.all_ids = l[6]
-
-    def read_pickle_corpus(self,l):
-        self.ids = l[0]
-        self.names = l[1]
-        self.padded = l[3]
-        self.elmo = l[4]
-        self.all = l[5]
-    '''
 
 class Data:
     '''

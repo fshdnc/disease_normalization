@@ -1,6 +1,8 @@
 # large stuff, haven't look at the license
 gitig/*
 data/*
+*.json
+*.h5
 
 # testing files and drafts
 gitig_*
