@@ -2,9 +2,12 @@
 gitig/*
 data/*
 
-#testing files and drafts
+# testing files and drafts
 gitig_*
 src/dis*
+
+# virtual environments
+venv*
 
 ##directly copied from en-dash/disease-normalization
 # Large blobs

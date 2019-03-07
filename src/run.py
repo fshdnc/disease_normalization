@@ -1,3 +1,4 @@
+'''requires theano backend'''
 import logging
 import logging.config
 
@@ -105,7 +106,9 @@ corpus_dev.tokenized_mentions, corpus_dev.vectorized_numpy_mentions = vectorizer
 logger.info('Formatting test mention ids...')
 no_canonical_id_found = []
 corpus_dev.mention_ids = [sample.canonical_id_list(mention.id,dictionary.loaded,no_canonical_id_found) for obj in corpus_dev.objects for part in obj.sections for mention in part.mentions]
-logger.info('Test set: No canonical id found for: '+'; '.join(set(no_canonical_id_found)))
+if no_canonical_id_found:
+	logger.info('Test set: No canonical id found for: '+'; '.join(set(no_canonical_id_found)))
+logger.info('Test set: No canonical id found for {0} mentions'.format(len(set(no_canonical_id_found))))
 
 #padding for mentions
 from keras.preprocessing.sequence import pad_sequences
@@ -176,6 +179,7 @@ if int(config['candidate']['use']): # if can_gen is used
 else: #not using candidates
 	logger.info('Not using candidate generation...')
 	try:
+		raise IOError
 		logger.info('Loading pre-saved formatted data for CNN input.')
 		logger.warning('Not creating candidate_generation.Candidates() object.')
 		import pickle
@@ -238,7 +242,7 @@ if config.getint('embedding','elmo'): # using elmo
 			pickle.dump(data,f,protocol=4)
 		logger.info('Elmo embedding for mentions and candidates saved.')
 	for corpus, data in zip([corpus_train,corpus_dev],[training_data,val_data]):
-		data.x.extend(vectorizer_elmo.elmo_format_x(corpus.elmo,can_list.elmo))
+		data.x.extend(np.array(vectorizer_elmo.elmo_format_x(corpus.elmo,can_list.elmo)))
 
 if not int(config['model']['use_saved_model']):	   # train new model
 	import cnn, model_tools
@@ -246,9 +250,18 @@ if not int(config['model']['use_saved_model']):	   # train new model
 	evaluation_function = EarlyStoppingRankingAccuracy(config,val_data)
 	cnn.print_input(training_data)
 	model = cnn.build_model(config,training_data,vocabulary,pretrained)
-	logger.warning('Using truncated data!')
-	fake_data_x = [training_data.x[0][:10000],training_data.x[1][:10000]]
-	hist = model.fit(fake_data_x, training_data.y[:10000], epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+	
+	if int(config['settings']['imp_tr']):
+	#importance sampling
+		from importance_sampling.training import ImportanceTraining
+		logger.warning('Using truncated data!')
+		fake_data_x = [a[:1000000]for a in training_data.x]
+		hist = ImportanceTraining(model).fit(fake_data_x, training_data.y[:1000000], epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+	else:
+		logger.warning('Using truncated data!')
+		fake_data_x = [a[:10000]for a in training_data.x]
+		hist = model.fit(fake_data_x, training_data.y[:10000], epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+	
 	#hist = model.fit(training_data.x, training_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
 	# WARNING (theano.tensor.blas): We did not found a dynamic library into the library_dir of the library we use for blas. If you use ATLAS, make sure to compile it with dynamics library.
 	logger.info('Saving newly trained model...')

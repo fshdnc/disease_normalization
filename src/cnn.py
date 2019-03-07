@@ -82,6 +82,9 @@ def build_model(conf,training_data,vocabulary,pretrained):
     inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
     if int(conf['candidate']['use']):
         inp_scores = Input(shape=(training_data.x[2].shape[1],),dtype='float64', name='inp_scores')
+    if conf.getint('embedding','elmo'):
+        inp_mentions_elmo = Input(shape=(training_data.x[-2].shape[1],),dtype='float32', name='inp_mentions_elmo')
+        inp_candidates_elmo = Input(shape=(training_data.x[-1].shape[1],),dtype='float32', name='inp_candidates_elmo')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
     encoded_mentions = embedding_layer(inp_mentions)
@@ -91,20 +94,38 @@ def build_model(conf,training_data,vocabulary,pretrained):
     conv_candidates = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+    if conf.getint('embedding','elmo'):
+        conv_mentions_elmo = Conv1D(filters=50,kernel_size=3,activation='relu')(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=50,kernel_size=3,activation='relu')(inp_candidates_elmo)
+        pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
+        pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
+        v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
     v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
 
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
     if int(conf['candidate']['use']):
-        join_layer = Concatenate()([pooled_mentions,pooled_candidates,inp_scores,v_sem])
-    else:
-        join_layer = Concatenate()([pooled_mentions,pooled_candidates,v_sem])
-    hidden_layer = Dense(64, activation='relu')(join_layer)
-    prediction_layer = Dense(1,activation='sigmoid')(join_layer)
+        concatenate_list.append(inp_scores)
+    if conf.getint('embedding','elmo'):
+        concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
 
-    if int(conf['candidate']['use']):
-        model = Model(inputs=[inp_mentions,inp_candidates,inp_scores], outputs=prediction_layer)
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu')(join_layer)
+    if int(conf['settings']['imp_tr']):
+        from keras.layers import Activation
+        prediction_layer = Activation('sigmoid')(hidden_layer)
     else:
-        model = Model(inputs=[inp_mentions,inp_candidates], outputs=prediction_layer)
+        prediction_layer = Dense(1,activation='sigmoid')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+    if int(conf['candidate']['use']):
+        input_list.append(inp_scores)
+    if conf.getint('embedding','elmo'):
+        input_list.extend([inp_mentions_elmo,inp_candidates_elmo])
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer='adadelta', loss='binary_crossentropy')
 
     return model

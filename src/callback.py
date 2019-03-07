@@ -8,7 +8,7 @@ Modified from: https://github.com/lfurrer/disease-normalization/blob/master/tzli
 import numpy as np
 import logging
 logger = logging.getLogger(__name__)
-print('change! callback.py, def evaluate after fixing logging')
+
 from keras.callbacks import Callback
 
 def evaluate(data_mentions, predictions, data_y):
@@ -19,16 +19,18 @@ def evaluate(data_mentions, predictions, data_y):
 	data_y: e.g. val_data.y, of the form [[0],[1],...,[0]]
 	'''
 	assert len(predictions) == len(data_y)
+	predictions = [item for sublist in predictions for item in sublist]
 	correct = 0
+	logger.warning('High chance of same prediction scores.')
 	for start, end, untok_mention in data_mentions:
-		index_prediction = np.argmax(predictions[start:end],axis=0)
-		index_gold = np.argmax(data_y[start:end],axis=0)
-		if index_prediction == index_gold:
+		index_prediction = np.argmax(predictions[start:end],axis=-1)
+		if data_y[start:end][index_prediction] == 1:
+		##index_gold = np.argmax(data_y[start:end],axis=0)
+		##if index_prediction == index_gold:
 			correct += 1
 	total = len(data_mentions)
 	accuracy = correct/total
 	logger.info('Accuracy: {0}, Correct: {1}, Total: {2}'.format(accuracy,correct,total))
-	print('Accuracy: {0}, Correct: {1}, Total: {2}'.format(accuracy,correct,total))
 	return accuracy
 
 class EarlyStoppingRankingAccuracy(Callback):
@@ -76,7 +78,7 @@ class EarlyStoppingRankingAccuracy(Callback):
 			from model_tools import save_predictions
 			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
 			save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
-		print('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
 		return
 
 	def on_train_end(self, logs=None):

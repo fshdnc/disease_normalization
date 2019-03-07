@@ -31,6 +31,67 @@ class Sample:
         self.y = None
         self.mentions = None
 
+class NewDataSet:
+    '''
+    class for run_new.py
+    '''
+    def __init__(self,info):
+        self.info = info
+        assert self.info in ['training corpus','dev corpus','concepts']
+        self.objects = None # freshly loaded in an ugly format
+
+        self.ids = None
+        self.all_ids = None # for dict concepts
+        self.names = None
+        self.map = None
+        self.tokenize = None
+        self.padded = None
+        self.elmo = None
+
+        self.vectorize = None # numpy array
+        self.all = None # dict
+
+    '''
+    def get_pickle(self):
+        ls = [item for item in [self.ids, self.names, self.map, self.padded, self.elmo, self.all, self.all_ids] if item is not None]
+        for n,item in enumerate([self.ids, self.names, self.map, self.padded, self.elmo, self.all, self.all_ids]):
+            if item is not None:
+                print(n)
+        # only ids, names, map, and all gets pickled for some reason
+        import pdb;pdb.set_trace()
+        return ls
+    '''
+
+    def info(self):
+        return self.info
+
+    '''
+    def read_pickle_concept(self,l):
+        self.ids = l[0]
+        self.names = l[1]
+        self.map = l[2]
+        self.padded = l[3]
+        self.elmo = l[4]
+        self.all = l[5]
+        self.all_ids = l[6]
+
+    def read_pickle_corpus(self,l):
+        self.ids = l[0]
+        self.names = l[1]
+        self.padded = l[3]
+        self.elmo = l[4]
+        self.all = l[5]
+    '''
+
+class Data:
+    '''
+    class for run_new.py
+    '''
+    def __init__(self):
+        self.x = None
+        self.y = None
+        self.mentions = None
+
 def canonical_id_list(id_list,dictionary_loaded,no_id_list):
     keys = dictionary_loaded.keys()
     cache = [_canonical(_nor_id(ID),keys,dictionary_loaded,no_id_list) for ID in id_list]
@@ -46,6 +107,7 @@ def _nor_id(ID):
     in the control vocab.
     '''
     assert type(ID)==str
+    # assert 'MESH' not in ID ## already tested
     if 'OMIM' not in ID:
         ID='MESH:'+ID.strip() #one single id had a space in front of it
     return ID
@@ -67,6 +129,10 @@ def _canonical(ID,keys,dictionary_loaded,no_id_list):
             return cache
         elif len(cache_list) > 1:
             logger.warning('{0} candidates for non-canonical ID {1}!'.format(len(cache_list),ID))
+        ''' # tested, actually works
+        else:
+            logger.info('{0} changed to canonical id {1}'.format(ID,cache_list[0]))
+        '''
         cache = cache_list[0]
     return cache
 
@@ -214,8 +280,13 @@ def no_cangen_format_y(candidates,ground_truths):
     returns list of numpy arrays of 0/1
     '''
     # golds = [item for sublist in ground_truths for item in sublist]
+    import pdb;pdb.set_trace()
+    print('condition of 1 and 0 being debugged')
     golds = [sublist[0] for sublist in ground_truths]
-    y = [[1] if gold == can else [0] for gold in golds for can in candidates]
+    # original line:
+    # y = [[1] if gold == can else [0] for gold in golds for can in candidates]
+    # haven't checked if this new line is correct, refer to gitig_test_evaluation.py
+    y = [[1] if gold[0] in can and len(gold)==1 else [0] for gold in golds for can in candidates]
     y_ = [item for sublist in y for item in sublist]
     logger.debug('Total number of correct candidates: {0}'.format(sum(y_)))
     return np.array(y)
