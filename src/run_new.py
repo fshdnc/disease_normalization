@@ -182,13 +182,20 @@ if not int(config['model']['use_saved_model']):    # train new model
     evaluation_function = EarlyStoppingRankingAccuracy(config,val_data)
     cnn.print_input(tr_data)
     model = cnn.build_model(config,tr_data,vocabulary,pretrained)
-    
-    if int(config['settings']['imp_tr']):
-    #importance sampling
-        from importance_sampling.training import ImportanceTraining
-        logger.warning('Using truncated data!')
-        fake_data_x = [a[:1000000]for a in tr_data.x]
-        hist = ImportanceTraining(model).fit(fake_data_x, tr_data.y[:1000000], epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+
+    # select hardest training samples from preliminary training
+    if config.getint('training','sample_hard'):
+        import sp_training
+        for ep in range(int(config['training']['epoch'])):
+            tr_predictions = model.predict(tr_data.x)
+            sampled_indices= sp_training.sample_hard(config.getint('training','hard_n'),tr_data.mentions, tr_predictions, tr_data.y)
+
+            new_tr_data = sample.NewDataSet('training corpus')
+            new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
+            new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
+            new_tr_data.y = tr_data.y[sampled_indices]
+
+            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
     else:
         '''
         logger.warning('Using truncated data!')
@@ -196,31 +203,11 @@ if not int(config['model']['use_saved_model']):    # train new model
         hist = model.fit(fake_data_x, tr_data.y[:10000], epochs=1, batch_size=100, callbacks=[evaluation_function])
         '''
         hist = model.fit(tr_data.x, tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
-    
-    #hist = model.fit(tr_data.x, tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
-    # WARNING (theano.tensor.blas): We did not found a dynamic library into the library_dir of the library we use for blas. If you use ATLAS, make sure to compile it with dynamics library.
-    logger.info('Saving preliminarily trained model...')
-    model_tools.save_model(model,'gitig_preliminarily_trained_architecture.json','gitig_preliminarily_trained_weights.h5')
-    # model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
+    logger.info('Saving trained model...')
+    model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
+
 else:
     from cnn import semantic_similarity_layer
     import cnn, model_tools
     model = model_tools.load_model(config['model']['path_model_architecture'],config['model']['path_model_weights'],{'semantic_similarity_layer': semantic_similarity_layer})
     model.compile(optimizer='adadelta',loss='binary_crossentropy')
-
-
-# select hardest training samples from preliminary training
-if config.getint('training','sample_hard'):
-    import sp_training
-    tr_predictions = model.predict(tr_data.x)
-    sampled_indices= sp_training.sample_hard(config.getint('training','hard_n'),tr_data.mentions, tr_predictions, tr_data.y)
-
-    new_tr_data = sample.NewDataSet('training corpus')
-    new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
-    new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
-    new_tr_data.y = tr_data.y[sampled_indices]
-
-    hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
-
-    logger.info('Saving trained model...')
-    model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
