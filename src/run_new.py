@@ -1,4 +1,4 @@
-'''Reorganized code, elmo without candidate generation'''
+'''Reorganized code, elmo optional without candidate generation'''
 
 import logging
 import logging.config
@@ -121,9 +121,10 @@ for corpus in [corpus_train, corpus_dev]:
     for abstract in corpus.objects:
         for section in abstract.sections: # title and abstract
             for mention in section.mentions:
-                mention_ids.append(mention.id) # append list of ids, usually len(list)=1
+                nor_ids = [sample._nor_id(one_id) for one_id in mention.id]
+                mention_ids.append(nor_ids) # append list of ids, usually len(list)=1
                 mention_names.append(mention.text)
-                mention_all.append((mention.text,mention.id,section.text,(mention.start,mention.end,abstract.docid)))
+                mention_all.append((mention.text,nor_ids,section.text,(mention.start,mention.end,abstract.docid)))
 
     # tokenization & vectorization of mentions
     mention_tokenize = [nltk.word_tokenize(name) for name in mention_names]
@@ -133,6 +134,7 @@ for corpus in [corpus_train, corpus_dev]:
 
     corpus.ids = mention_ids
     corpus.names = mention_names
+    corpus.all = mention_all
     corpus.tokenize = mention_tokenize
     corpus.vectorize = mention_vectorize
     if config.getint('embedding','elmo'):
@@ -186,16 +188,38 @@ if not int(config['model']['use_saved_model']):    # train new model
     # select hardest training samples from preliminary training
     if config.getint('training','sample_hard'):
         import sp_training
-        for ep in range(int(config['training']['epoch'])):
+        from datetime import datetime
+        for ep in range(2):
             tr_predictions = model.predict(tr_data.x)
-            sampled_indices= sp_training.sample_hard(config.getint('training','hard_n'),tr_data.mentions, tr_predictions, tr_data.y)
+            import pickle
+            with open('gitig_predictions.pickle','wb') as f:
+                pickle.dump(tr_predictions,f,protocol=4)
+            logger.info('Predictions from epoch {0} saved to gitig_predictions.pickle.'.format(ep))
+            sampled_indices = sp_training.sample_hard(config.getint('training','hard_n'),tr_data.mentions, tr_predictions, tr_data.y)
 
             new_tr_data = sample.NewDataSet('training corpus')
             new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
             new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
-            new_tr_data.y = tr_data.y[sampled_indices]
+            new_tr_data.y = np.array(tr_data.y)[sampled_indices]
+            logger.info('{0} pairs of candidate-mentions subsampled.'.format(len(new_tr_data.y)))
 
-            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+            import pickle
+            with open('gitig_new_tr_data.pickle','wb') as f:
+                pickle.dump(new_tr_data,f,protocol=4)
+            logger.info('Subsampled data saved.')
+            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, callbacks=[evaluation_function])
+            logger.info('Saving weights from epoch {0}.'.format(ep))
+            datetime.now().strftime('%Y%m%d-%H%M%S')
+            weights_name = 'gitig_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_model_' + str(ep) + '.h5'
+            model.save_weights(weights_name)
+
+        eps = int(config['training']['epoch'])-2
+        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function])
+
+        logger.info('Saving weights from epoch {0}.'.format(ep))
+        datetime.now().strftime('%Y%m%d-%H%M%S')
+        weights_name = 'gitig_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_model_' + str(ep) + '.h5'
+        model.save_weights(weights_name)
     else:
         '''
         logger.warning('Using truncated data!')

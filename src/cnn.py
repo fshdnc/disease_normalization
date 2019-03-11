@@ -126,7 +126,7 @@ def build_model(conf,training_data,vocabulary,pretrained):
         input_list.extend([inp_mentions_elmo,inp_candidates_elmo])
 
     model = Model(inputs=input_list, outputs=prediction_layer)
-    model.compile(optimizer='adadelta', loss='binary_crossentropy')
+    model.compile(optimizer='adagrad', loss='binary_crossentropy')
 
     return model
 
