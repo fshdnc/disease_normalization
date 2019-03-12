@@ -37,7 +37,7 @@ class NewDataSet:
     '''
     def __init__(self,info):
         self.info = info
-        assert self.info in ['training corpus','dev corpus','concepts']
+        assert self.info in ['training corpus','dev corpus','test corpus','concepts']
         self.objects = None # freshly loaded in an ugly format
 
         self.ids = None

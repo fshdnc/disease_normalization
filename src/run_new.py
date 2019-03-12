@@ -8,6 +8,7 @@ import args
 
 import numpy as np
 from keras.preprocessing.sequence import pad_sequences
+import pickle
 
 import vectorizer
 import load
@@ -73,15 +74,26 @@ for k in dictionary.loaded.keys(): # keys should be in congruent order
     c_id = dictionary.loaded[k].DiseaseID
     a_ids = dictionary.loaded[k].AllDiseaseIDs
     
-    for n in dictionary.loaded[k].AllNames:
-        concept_ids.append(c_id)
-        concept_all_ids.append(a_ids)
-        concept_names.append(n)
-        if n in concept_map: # one name corresponds to multiple concepts
-            concept_map[n].append(c_id)
-            # logger.warning('{0} already in the dictionary with id {1}'.format(n,concept_map[n]))
-        else:
-            concept_map[n] = [c_id]
+    if int(config['settings']['all_names']):
+        for n in dictionary.loaded[k].AllNames:
+            concept_ids.append(c_id)
+            concept_all_ids.append(a_ids)
+            concept_names.append(n)
+            if n in concept_map: # one name corresponds to multiple concepts
+                concept_map[n].append(c_id)
+                # logger.warning('{0} already in the dictionary with id {1}'.format(n,concept_map[n]))
+            else:
+                concept_map[n] = [c_id]
+    else:
+        for n in dictionary.loaded[k].DiseaseName:
+            concept_ids.append(c_id)
+            concept_all_ids.append(a_ids)
+            concept_names.append(n)
+            if n in concept_map: # one name corresponds to multiple concepts
+                concept_map[n].append(c_id)
+                # logger.warning('{0} already in the dictionary with id {1}'.format(n,concept_map[n]))
+            else:
+                concept_map[n] = [c_id]
 
 
 # tokenization & vectorization of dictionary terms
@@ -152,7 +164,6 @@ for corpus in [concept,corpus_train,corpus_dev]:
 
 # format data for cnn
 try:
-    import pickle
     [tr_data,val_data] = pickle.load(open('gitig_new_data.pickle','rb'))
     tr_data.y=np.array(tr_data.y)
     val_data.y=np.array(val_data.y)
@@ -189,33 +200,45 @@ if not int(config['model']['use_saved_model']):    # train new model
     if config.getint('training','sample_hard'):
         import sp_training
         from datetime import datetime
-        for ep in range(2):
-            tr_predictions = model.predict(tr_data.x)
-            import pickle
-            with open('gitig_predictions.pickle','wb') as f:
-                pickle.dump(tr_predictions,f,protocol=4)
-            logger.info('Predictions from epoch {0} saved to gitig_predictions.pickle.'.format(ep))
-            sampled_indices = sp_training.sample_hard(config.getint('training','hard_n'),tr_data.mentions, tr_predictions, tr_data.y)
+        '''
+        try:
+            new_tr_data = pickle.load(open('gitig_new_tr_data.pickle','rb'))
+            logger.info('Using saved subsampled data')
+        except OSError:
+            for ep in range(2):
+                tr_predictions = model.predict(tr_data.x)
+                import pickle
+                with open('gitig_predictions.pickle','wb') as f:
+                    pickle.dump(tr_predictions,f,protocol=4)
+                logger.info('Predictions from epoch {0} saved to gitig_predictions.pickle.'.format(ep))
+        '''
+        tr_predictions = model.predict(tr_data.x)
+        with open('gitig_predictions_all.pickle','wb') as f:
+            pickle.dump(tr_predictions,f,protocol=4)
+        #tr_predictions = pickle.load(open('gitig_predictions.pickle','rb'))
+        new_tr_data = sample.NewDataSet('training corpus')
+        sampled_indices,new_tr_data.mentions = sp_training.sample_hard_ratio(19,100,tr_data.mentions, tr_predictions, tr_data.y)
 
-            new_tr_data = sample.NewDataSet('training corpus')
-            new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
-            new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
-            new_tr_data.y = np.array(tr_data.y)[sampled_indices]
-            logger.info('{0} pairs of candidate-mentions subsampled.'.format(len(new_tr_data.y)))
+        #new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
+        new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
+        new_tr_data.y = np.array(tr_data.y)[sampled_indices]
+        logger.info('{0} pairs of candidate-mentions subsampled.'.format(len(new_tr_data.y)))
 
-            import pickle
-            with open('gitig_new_tr_data.pickle','wb') as f:
-                pickle.dump(new_tr_data,f,protocol=4)
-            logger.info('Subsampled data saved.')
-            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, callbacks=[evaluation_function])
-            logger.info('Saving weights from epoch {0}.'.format(ep))
-            datetime.now().strftime('%Y%m%d-%H%M%S')
-            weights_name = 'gitig_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_model_' + str(ep) + '.h5'
-            model.save_weights(weights_name)
+        import pickle
+        with open('gitig_new_tr_data_ratio.pickle','wb') as f:
+            pickle.dump(new_tr_data,f,protocol=4)
+        logger.info('Subsampled data saved.')
 
-        eps = int(config['training']['epoch'])-2
+        #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, callbacks=[evaluation_function])
+        #logger.info('Saving weights from epoch {0}.'.format(ep))
+        #datetime.now().strftime('%Y%m%d-%H%M%S')
+        #weights_name = 'gitig_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_model_' + str(ep) + '.h5'
+        #model.save_weights(weights_name)
+
+        eps = int(config['training']['epoch'])
         hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function])
 
+        ep = 'final'
         logger.info('Saving weights from epoch {0}.'.format(ep))
         datetime.now().strftime('%Y%m%d-%H%M%S')
         weights_name = 'gitig_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_model_' + str(ep) + '.h5'
@@ -235,3 +258,7 @@ else:
     import cnn, model_tools
     model = model_tools.load_model(config['model']['path_model_architecture'],config['model']['path_model_weights'],{'semantic_similarity_layer': semantic_similarity_layer})
     model.compile(optimizer='adadelta',loss='binary_crossentropy')
+
+
+# sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
+# hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, callbacks=[evaluation_function],sample_weight=sample_weight)

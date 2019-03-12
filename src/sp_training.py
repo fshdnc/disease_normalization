@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 from keras.callbacks import Callback
 
-def sample_hard(n, data_mentions, predictions, data_y):
+def sample_hard_total(n, data_mentions, predictions, data_y):
 	'''
 	Takes in predictions, gold standards, picks the oracles and hardest concepts,
 	the numbers of which sum to n. Returns a list indexes of the sampled concepts.
@@ -25,6 +25,7 @@ def sample_hard(n, data_mentions, predictions, data_y):
 
 	len_sample_not_n = 0
 	oracle_zero = 0
+	hard_n_negative = 0
 	for start, end, untok_mention in data_mentions:
 		oracle_index = [i for i,l in enumerate(data_y[start:end]) if l==np.array([1])]
 		#print('oracle index:',oracle_index)
@@ -40,6 +41,10 @@ def sample_hard(n, data_mentions, predictions, data_y):
 		#import pdb;pdb.set_trace()
 		sampled = list(set(hardest_index+oracle_index))
 		try:
+			assert hard_n>0
+		except AssertionError:
+			hard_n_negative += 1
+		try:
 			assert len(sampled)==n
 		except AssertionError:
 			len_sample_not_n += 1
@@ -50,6 +55,7 @@ def sample_hard(n, data_mentions, predictions, data_y):
 		except AssertionError:
 			oracle_zero += 1
 		hard_and_gold.extend([i+start for i in sampled])
+	print('hard n is negative:',hard_n_negative)
 	print('sample length does not equal to n:',len_sample_not_n)
 	print('no oracle found:',oracle_zero)
 	hard_and_gold.sort()
@@ -57,3 +63,55 @@ def sample_hard(n, data_mentions, predictions, data_y):
 	return np.array(hard_and_gold)
 
 # evaluate(self.val_data.mentions, test_y, self.val_data.y)
+
+def sample_hard_ratio(r, z, data_mentions, predictions, data_y):
+	'''
+	Takes in predictions, gold standards, picks the oracles and hardest concepts,
+	with the ratio of [1] and [0] being 1:r. If no [1], sample z.
+	Returns (1) a list indexes of the sampled concepts
+		    (2) a list of mentions [(start,end,untok_mention),(),...,()]
+
+	Input:
+	data_mentions: e.g. val_data.mentions, of the form [(start,end,untok_mention),(),...,()]
+	predictions: [[prob],[prob],...,[prob]]
+	data_y: e.g. val_data.y, of the form [[0],[1],...,[0]]
+	'''
+	assert len(predictions) == len(data_y)
+	predictions = [item for sublist in predictions for item in sublist]
+	hard_and_gold = []
+	new_mentions = []
+
+	oracle_zero = 0
+
+	for start, end, untok_mention in data_mentions:
+		oracle_index = []
+		non_oracle_index = []
+		for i,l in enumerate(data_y[start:end]):
+			if l==np.array([1]):
+				oracle_index.append(i)
+			else:
+				non_oracle_index.append(i)
+
+		# assert len(oracle_index+non_oracle_index) == end-start
+		if oracle_index:
+			hard_n = len(oracle_index)*r
+		else:
+			hard_n = z
+		#print('hard_n',hard_n)
+		non_oracle_predictions = np.array(predictions[start:end])[np.array(non_oracle_index)]
+		#print('non_oracle_predictions length',len(non_oracle_predictions))
+		hardest_index = np.argpartition(non_oracle_predictions,-hard_n)[-hard_n:].tolist()
+		#print('hardest_index',hardest_index)
+		#import pdb;pdb.set_trace()
+		sampled = list(set(hardest_index+oracle_index))
+		try:
+			assert len(oracle_index)!=0
+		except AssertionError:
+			oracle_zero += 1
+		new_mention = (len(hard_and_gold),len(hard_and_gold)+len(sampled),untok_mention)
+
+		hard_and_gold.extend([i+start for i in sampled])
+		new_mentions.append(new_mention)
+	print('no oracle found:',oracle_zero)
+	hard_and_gold.sort()
+	return np.array(hard_and_gold),new_mentions
