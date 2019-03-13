@@ -53,7 +53,7 @@ logging.config.dictConfig({
 
 
 # word embedding
-vector_model, vocabulary, inversed_vocabulary = vectorizer.prepare_embedding_vocab('~/old-disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin', binary = True, limit = 50000)
+vector_model, vocabulary, inversed_vocabulary = vectorizer.prepare_embedding_vocab('/home/lhchan/disease_normalization/data/pubmed2018_w2v_400D/pubmed2018_w2v_400D.bin', binary = True, limit = 1000000)
 pretrained = vectorizer.load_pretrained_word_embeddings(vocabulary, vector_model)
 
 
@@ -99,7 +99,7 @@ for k in dictionary.loaded.keys(): # keys should be in congruent order
 # tokenization & vectorization of dictionary terms
 import nltk
 concept_tokenize = [nltk.word_tokenize(name) for name in concept_names] # list of list of tokenized names
-concept_vectorize = np.array([[vocabulary.get(text,1) for text in concept] for concept in concept_tokenize])
+concept_vectorize = np.array([[vocabulary.get(text.lower(),1) for text in concept] for concept in concept_tokenize])
 if config.getint('embedding','elmo'):
     from vectorizer_elmo import elmo_default
     concept_elmo = elmo_default([concept_names])
@@ -140,7 +140,7 @@ for corpus in [corpus_train, corpus_dev]:
 
     # tokenization & vectorization of mentions
     mention_tokenize = [nltk.word_tokenize(name) for name in mention_names]
-    mention_vectorize = np.array([[vocabulary.get(text,1) for text in mention] for mention in mention_tokenize])
+    mention_vectorize = np.array([[vocabulary.get(text.lower(),1) for text in mention] for mention in mention_tokenize])
     if config.getint('embedding','elmo'):
         mention_elmo = elmo_default([mention_names])
 
@@ -164,6 +164,7 @@ for corpus in [concept,corpus_train,corpus_dev]:
 
 # format data for cnn
 try:
+    raise OSError
     [tr_data,val_data] = pickle.load(open('gitig_new_data.pickle','rb'))
     tr_data.y=np.array(tr_data.y)
     val_data.y=np.array(val_data.y)
@@ -181,7 +182,6 @@ except OSError:
         assert len(data.x[0]) == len(data.y)
         
     # save the data for cnn since it takes forever to generate
-    import pickle
     data = [tr_data,val_data]
     with open('gitig_new_data.pickle','wb') as f:
         pickle.dump(data,f,protocol=4)
@@ -200,34 +200,38 @@ if not int(config['model']['use_saved_model']):    # train new model
     if config.getint('training','sample_hard'):
         import sp_training
         from datetime import datetime
-        '''
+        
         try:
+            raise OSError
             new_tr_data = pickle.load(open('gitig_new_tr_data.pickle','rb'))
             logger.info('Using saved subsampled data')
         except OSError:
-            for ep in range(2):
+            for ep in range(1):
                 tr_predictions = model.predict(tr_data.x)
                 import pickle
                 with open('gitig_predictions.pickle','wb') as f:
                     pickle.dump(tr_predictions,f,protocol=4)
                 logger.info('Predictions from epoch {0} saved to gitig_predictions.pickle.'.format(ep))
-        '''
-        tr_predictions = model.predict(tr_data.x)
-        with open('gitig_predictions_all.pickle','wb') as f:
-            pickle.dump(tr_predictions,f,protocol=4)
-        #tr_predictions = pickle.load(open('gitig_predictions.pickle','rb'))
+        
+        #tr_predictions = model.predict(tr_data.x)
+        #with open('gitig_predictions_all.pickle','wb') as f:
+        #    pickle.dump(tr_predictions,f,protocol=4)
+        
+        #tr_predictions = pickle.load(open('gitig_predictions_all.pickle','rb'))
         new_tr_data = sample.NewDataSet('training corpus')
         sampled_indices,new_tr_data.mentions = sp_training.sample_hard_ratio(19,100,tr_data.mentions, tr_predictions, tr_data.y)
+        
 
         #new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
         new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
         new_tr_data.y = np.array(tr_data.y)[sampled_indices]
         logger.info('{0} pairs of candidate-mentions subsampled.'.format(len(new_tr_data.y)))
 
-        import pickle
         with open('gitig_new_tr_data_ratio.pickle','wb') as f:
             pickle.dump(new_tr_data,f,protocol=4)
         logger.info('Subsampled data saved.')
+        
+        #new_tr_data = pickle.load(open('gitig_new_tr_data_ratio.pickle','rb'))
 
         #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, callbacks=[evaluation_function])
         #logger.info('Saving weights from epoch {0}.'.format(ep))
@@ -236,7 +240,16 @@ if not int(config['model']['use_saved_model']):    # train new model
         #model.save_weights(weights_name)
 
         eps = int(config['training']['epoch'])
-        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function])
+        sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
+        count = 1
+        for i in range(5):
+            print('Epoch{0}'.format(count))
+            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=5, batch_size=100, sample_weight=sample_weight) #callbacks=[evaluation_function]
+            count += 5
+            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function])
+            count += 1
+
+        #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function])
 
         ep = 'final'
         logger.info('Saving weights from epoch {0}.'.format(ep))
@@ -250,6 +263,7 @@ if not int(config['model']['use_saved_model']):    # train new model
         hist = model.fit(fake_data_x, tr_data.y[:10000], epochs=1, batch_size=100, callbacks=[evaluation_function])
         '''
         hist = model.fit(tr_data.x, tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
+
     logger.info('Saving trained model...')
     model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
 
@@ -260,5 +274,3 @@ else:
     model.compile(optimizer='adadelta',loss='binary_crossentropy')
 
 
-# sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
-# hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, callbacks=[evaluation_function],sample_weight=sample_weight)
