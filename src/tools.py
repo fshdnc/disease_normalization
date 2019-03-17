@@ -38,3 +38,12 @@ def shelve_working_env(filename):
     logger.info('Working environment variables saved to {0}'.format(filename))
     my_shelf.close()
 '''
+
+def uniq(lst):
+    new_lst = []
+    previous = None
+    for i in lst:
+        if previous != i:
+            new_lst.append(i)
+        previous = i
+    return new_lst

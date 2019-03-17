@@ -208,6 +208,20 @@ def check_candidates(sample,ground_truths):
                 y.append(np.array([0]))
     sample.y = np.array(y)
 
+def sped_up_format_x(mentions,candidates):
+    '''
+    Input:
+        mentions: pooled mentions
+        candidates: pooled candidates
+    [corpus.padded,len(corpus.padded)*[can_list.vectorized]
+    '''
+    can_no = len(candidates)
+    men_no = len(mentions)
+    x0 = [mention for mention in mentions for _ in range(can_no)]
+    x1 = [candidate for _ in range(men_no) for candidate in candidates]
+    assert len(x0)==len(x1)
+    return [np.array(x0),np.array(x1)]
+
 def no_cangen_format_x(mentions,candidates):
     '''
     Input:

@@ -137,36 +137,124 @@ def build_model(conf,training_data,vocabulary,pretrained):
 __________________________________________________________________________________________________
 Layer (type)                    Output Shape         Param #     Connected to                     
 ==================================================================================================
-inp_mentions (InputLayer)       (None, 16)           0                                            
+inp_mentions (InputLayer)       (None, 20)           0                                            
 __________________________________________________________________________________________________
-inp_candidates (InputLayer)     (None, 27)           0                                            
+inp_candidates (InputLayer)     (None, 20)           0                                            
 __________________________________________________________________________________________________
-embedding_1 (Embedding)         multiple             2500100     inp_mentions[0][0]               
+embedding_1 (Embedding)         (None, 20, 400)      400000800   inp_mentions[0][0]               
                                                                  inp_candidates[0][0]             
 __________________________________________________________________________________________________
-conv1d_1 (Conv1D)               (None, 14, 50)       7550        embedding_1[0][0]                
+conv1d_1 (Conv1D)               (None, 18, 50)       60050       embedding_1[0][0]                
 __________________________________________________________________________________________________
-conv1d_2 (Conv1D)               (None, 25, 50)       7550        embedding_1[1][0]                
+conv1d_2 (Conv1D)               (None, 18, 50)       60050       embedding_1[1][0]                
 __________________________________________________________________________________________________
 global_max_pooling1d_1 (GlobalM (None, 50)           0           conv1d_1[0][0]                   
 __________________________________________________________________________________________________
 global_max_pooling1d_2 (GlobalM (None, 50)           0           conv1d_2[0][0]                   
 __________________________________________________________________________________________________
-inp_scores (InputLayer)         (None, 1)            0                                            
-__________________________________________________________________________________________________
-semantic_similarity_layer_4 (se (None, 1)            2500        global_max_pooling1d_1[0][0]     
+semantic_similarity_layer_1 (se (None, 1)            2500        global_max_pooling1d_1[0][0]     
                                                                  global_max_pooling1d_2[0][0]     
 __________________________________________________________________________________________________
-concatenate_1 (Concatenate)     (None, 102)          0           global_max_pooling1d_1[0][0]     
+concatenate_1 (Concatenate)     (None, 101)          0           global_max_pooling1d_1[0][0]     
                                                                  global_max_pooling1d_2[0][0]     
-                                                                 inp_scores[0][0]                 
-                                                                 semantic_similarity_layer_4[0][0]
+                                                                 semantic_similarity_layer_1[0][0]
 __________________________________________________________________________________________________
-dense_2 (Dense)                 (None, 1)            103         concatenate_1[0][0]              
+dense_1 (Dense)                 (None, 64)           6528        concatenate_1[0][0]              
+__________________________________________________________________________________________________
+dense_2 (Dense)                 (None, 1)            65          dense_1[0][0]                    
 ==================================================================================================
-Total params: 2,517,803
-Trainable params: 17,703
-Non-trainable params: 2,500,100
+Total params: 400,129,993
+Trainable params: 129,193
+Non-trainable params: 400,000,800
 __________________________________________________________________________________________________
-
 '''
+
+
+# Model to speed up forward pass, used in callback for evaluation
+
+def _forward_pass_speedup_conv(original_model,layers,pretrained):
+    '''
+    Input:
+    original_model
+    layers: list of layer names, one of the two
+        ['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1']
+        ['inp_candidates','embedding_1','conv1d_2','global_max_pooling1d_2']
+    '''
+    terms = original_model.get_layer(layers[0])
+    emb = original_model.get_layer(layers[1])
+    conv = original_model.get_layer(layers[2])
+
+    new_input_terms = Input(shape=(terms.input_shape[1],),dtype='int32', name='new_input_terms')
+    new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=[pretrained])
+    encoded = new_emb(new_input_terms)
+    new_conv = Conv1D(filters=conv.filters,kernel_size=conv.kernel_size[0],activation=conv.activation,weights=conv.get_weights())(encoded)
+    gl_max_p = GlobalMaxPooling1D()(new_conv)
+
+    model_part = Model(inputs=new_input_terms, outputs=gl_max_p)
+    return model_part
+
+def _forward_pass_speedup_sem(original_model,convoluted_x):
+    layers = ['semantic_similarity_layer_1','dense_1','dense_2']
+    v_sem = original_model.get_layer(layers[0])
+    d1 = original_model.get_layer(layers[1])
+    d2 = original_model.get_layer(layers[2])
+
+    pooled_mentions = Input(shape=(convoluted_x[0].shape[1],),dtype='float32', name='pooled_mentions')
+    pooled_candidates = Input(shape=(convoluted_x[1].shape[1],),dtype='float32', name='pooled_candidates')
+    sem = semantic_similarity_layer(weights = v_sem.get_weights())([pooled_mentions,pooled_candidates])
+    concatenate_list = [pooled_mentions,pooled_candidates,sem]
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(d1.units, activation=d1.activation,weights=d1.get_weights())(join_layer)
+    prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(hidden_layer)
+    
+    input_list = [pooled_mentions, pooled_candidates]
+    model_part = Model(inputs=input_list, outputs=prediction_layer)
+    return model_part
+
+def forward_pass_speedup(model,corpus_padded,concept_padded,pretrained):
+    '''
+    Model to speed up forward pass, used in callback for evaluation
+    '''
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    mentions = model_mention.predict(corpus_padded) # (787, 50)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_2','global_max_pooling1d_2'],pretrained)
+    candidates = model_candidate.predict(concept_padded) # (67782,50)
+    logger.info('Formatting pooled mentions and candidates...')
+    # from sample import no_cangen_format_x
+    from sample import sped_up_format_x
+    convoluted_input = sped_up_format_x(mentions,candidates)
+    model_sem = _forward_pass_speedup_sem(model,convoluted_input)
+    return convoluted_input, model_sem
+
+
+
+def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
+    '''
+    Check the effect of taking out the maxpooled mentions and candidates,
+    i.e. how the semantic similarity layer along performs.
+    '''
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    encoded_mentions = embedding_layer(inp_mentions)
+    encoded_candidates = embedding_layer(inp_candidates)
+
+    conv_mentions = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+
+    prediction_layer = Dense(1,activation='sigmoid')(v_sem)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    from keras import optimizers
+    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
+    model.compile(optimizer='adadelta', loss='binary_crossentropy')
+
+    return model

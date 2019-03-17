@@ -154,7 +154,7 @@ def emb_baseline(emb_path):
 
     #corpus_test = sample.NewDataSet('test corpus')
     #corpus_test.objects = load.load('/home/lhchan/disease_normalization/data/NCBItestset_corpus.txt','NCBI')
-
+    #corpus_dev=corpus_test
 
     for corpus in [corpus_dev]:
         mention_ids = [] # list of all ids (gold standard for each mention)
@@ -190,7 +190,8 @@ def emb_baseline(emb_path):
     for mention in corpus.names:
         tokenized = nltk.word_tokenize(mention.lower())
         index = [vocabulary.get(token,1) for token in tokenized]
-        emb = np.mean(np.array([pretrained[i] for i in index]), axis=0)
+        #emb = np.mean(np.array([pretrained[i] for i in index]), axis=0)
+        emb = np.sum(np.array([pretrained[i] for i in index]), axis=0)
         mention_embeddings.append(emb)
     mention_embeddings = np.array(mention_embeddings)
 
@@ -198,7 +199,8 @@ def emb_baseline(emb_path):
     for mention in concept.names:
         tokenized = nltk.word_tokenize(mention.lower())
         index = [vocabulary.get(token,1) for token in tokenized]
-        emb = np.mean(np.array([pretrained[i] for i in index]), axis=0)
+        #emb = np.mean(np.array([pretrained[i] for i in index]), axis=0)
+        emb = np.sum(np.array([pretrained[i] for i in index]), axis=0)
         concept_embeddings.append(emb)
     concept_embeddings = np.array(concept_embeddings)
 
