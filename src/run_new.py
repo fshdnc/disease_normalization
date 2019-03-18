@@ -164,8 +164,7 @@ for corpus in [concept,corpus_train,corpus_dev]:
 
 # format data for cnn
 try:
-    raise OSError
-    [tr_data,val_data] = pickle.load(open('gitig_new_data.pickle','rb'))
+    [tr_data,val_data,concept_order] = pickle.load(open('gitig_new_data.pickle','rb'))
     tr_data.y=np.array(tr_data.y)
     val_data.y=np.array(val_data.y)
     logger.info('Using saved data: {0}'.format('gitig_new_data.pickle'))
@@ -194,7 +193,7 @@ if not int(config['model']['use_saved_model']):    # train new model
     from callback import EarlyStoppingRankingAccuracy
     evaluation_function = EarlyStoppingRankingAccuracy(config,val_data)
     cnn.print_input(tr_data)
-    model = cnn.build_model(config,tr_data,vocabulary,pretrained)
+    model = cnn.build_model_maxpool_ablation(config,tr_data,vocabulary,pretrained)
 
     # select hardest training samples from preliminary training
     if config.getint('training','sample_hard'):
@@ -202,8 +201,7 @@ if not int(config['model']['use_saved_model']):    # train new model
         from datetime import datetime
         
         try:
-            raise OSError
-            new_tr_data = pickle.load(open('gitig_new_tr_data.pickle','rb'))
+            new_tr_data = pickle.load(open('gitig_new_tr_data_ratio.pickle','rb'))
             logger.info('Using saved subsampled data')
         except OSError:
             for ep in range(1):
@@ -212,24 +210,24 @@ if not int(config['model']['use_saved_model']):    # train new model
                 with open('gitig_predictions.pickle','wb') as f:
                     pickle.dump(tr_predictions,f,protocol=4)
                 logger.info('Predictions from epoch {0} saved to gitig_predictions.pickle.'.format(ep))
-        
-        #tr_predictions = model.predict(tr_data.x)
-        #with open('gitig_predictions_all.pickle','wb') as f:
-        #    pickle.dump(tr_predictions,f,protocol=4)
-        
-        #tr_predictions = pickle.load(open('gitig_predictions_all.pickle','rb'))
-        new_tr_data = sample.NewDataSet('training corpus')
-        sampled_indices,new_tr_data.mentions = sp_training.sample_hard_ratio(19,100,tr_data.mentions, tr_predictions, tr_data.y)
-        
+            
+            #tr_predictions = model.predict(tr_data.x)
+            #with open('gitig_predictions_all.pickle','wb') as f:
+            #    pickle.dump(tr_predictions,f,protocol=4)
+            
+            #tr_predictions = pickle.load(open('gitig_predictions_all.pickle','rb'))
+            new_tr_data = sample.NewDataSet('training corpus')
+            sampled_indices,new_tr_data.mentions = sp_training.sample_hard_ratio(19,100,tr_data.mentions, tr_predictions, tr_data.y)
+            
 
-        #new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
-        new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
-        new_tr_data.y = np.array(tr_data.y)[sampled_indices]
-        logger.info('{0} pairs of candidate-mentions subsampled.'.format(len(new_tr_data.y)))
+            #new_tr_data.mentions = sample.no_cangen_format_mentions(corpus_train.names,config.getint('training','hard_n'))
+            new_tr_data.x = [a[sampled_indices] for a in tr_data.x]
+            new_tr_data.y = np.array(tr_data.y)[sampled_indices]
+            logger.info('{0} pairs of candidate-mentions subsampled.'.format(len(new_tr_data.y)))
 
-        with open('gitig_new_tr_data_ratio.pickle','wb') as f:
-            pickle.dump(new_tr_data,f,protocol=4)
-        logger.info('Subsampled data saved.')
+            with open('gitig_new_tr_data_ratio.pickle','wb') as f:
+                pickle.dump(new_tr_data,f,protocol=4)
+            logger.info('Subsampled data saved.')
         
         #new_tr_data = pickle.load(open('gitig_new_tr_data_ratio.pickle','rb'))
 
@@ -241,13 +239,13 @@ if not int(config['model']['use_saved_model']):    # train new model
 
         eps = int(config['training']['epoch'])
         sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
-        count = 1
-        for i in range(5):
-            print('Epoch{0}'.format(count))
-            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=5, batch_size=100, sample_weight=sample_weight) #callbacks=[evaluation_function]
-            count += 5
-            hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function])
-            count += 1
+        #count = 1
+        #for i in range(5):
+            #print('Epoch{0}'.format(count))
+            #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=5, batch_size=100, sample_weight=sample_weight) #callbacks=[evaluation_function]
+            #count += 5
+        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=20, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function])
+            #count += 1
 
         #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function])
 

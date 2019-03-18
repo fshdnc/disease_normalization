@@ -258,3 +258,47 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     model.compile(optimizer='adadelta', loss='binary_crossentropy')
 
     return model
+
+def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    if int(conf['candidate']['use']):
+        inp_scores = Input(shape=(training_data.x[2].shape[1],),dtype='float64', name='inp_scores')
+    if conf.getint('embedding','elmo'):
+        inp_mentions_elmo = Input(shape=(training_data.x[-2].shape[1],),dtype='float32', name='inp_mentions_elmo')
+        inp_candidates_elmo = Input(shape=(training_data.x[-1].shape[1],),dtype='float32', name='inp_candidates_elmo')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    encoded_mentions = embedding_layer(inp_mentions)
+    encoded_candidates = embedding_layer(inp_candidates)
+
+    conv_mentions = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=50,kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+    if conf.getint('embedding','elmo'):
+        conv_mentions_elmo = Conv1D(filters=50,kernel_size=3,activation='relu')(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=50,kernel_size=3,activation='relu')(inp_candidates_elmo)
+        pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
+        pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
+        v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
+
+    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    from keras import optimizers
+    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
+    from nn.loss import AdaptedMaxMarginLoss
+    model.compile(optimizer='adadelta', loss=AdaptedMaxMarginLoss(track_obj))
+
+    return model

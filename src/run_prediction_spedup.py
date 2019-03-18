@@ -224,8 +224,8 @@ if not int(config['model']['use_saved_model']):    # train new model
     if config.getint('training','sample_hard'):
         import sp_training
         from datetime import datetime
-        from callback import EarlyStoppingRankingAccuracy
-        evaluation_function_1 = EarlyStoppingRankingAccuracy(config,val_data)
+        # from callback import EarlyStoppingRankingAccuracy
+        # evaluation_function_1 = EarlyStoppingRankingAccuracy(config,val_data)
         from callback import EarlyStoppingRankingAccuracySpedUp
         evaluation_function = EarlyStoppingRankingAccuracySpedUp(config,val_data,concept.padded,corpus_dev.padded,pretrained)
         
@@ -261,7 +261,7 @@ if not int(config['model']['use_saved_model']):    # train new model
         
                 #new_tr_data = pickle.load(open('gitig_new_tr_data_ratio.pickle','rb'))
                 sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
-                hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, sample_weight=sample_weight, callbacks=[evaluation_function,evaluation_function_1])
+                hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, sample_weight=sample_weight, callbacks=[evaluation_function])
                 #logger.info('Saving weights from epoch {0}.'.format(ep))
                 #datetime.now().strftime('%Y%m%d-%H%M%S')
                 #weights_name = 'gitig_' + datetime.now().strftime('%Y%m%d-%H%M%S') + '_model_' + str(ep) + '.h5'
