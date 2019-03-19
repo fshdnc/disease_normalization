@@ -164,7 +164,7 @@ for corpus in [concept,corpus_train,corpus_dev]:
 
 # format data for cnn
 try:
-    [tr_data,val_data,concept_order] = pickle.load(open('gitig_new_data.pickle','rb'))
+    [tr_data,val_data] = pickle.load(open('gitig_new_data.pickle','rb'))
     tr_data.y=np.array(tr_data.y)
     val_data.y=np.array(val_data.y)
     logger.info('Using saved data: {0}'.format('gitig_new_data.pickle'))
@@ -193,7 +193,7 @@ if not int(config['model']['use_saved_model']):    # train new model
     from callback import EarlyStoppingRankingAccuracy
     evaluation_function = EarlyStoppingRankingAccuracy(config,val_data)
     cnn.print_input(tr_data)
-    model = cnn.build_model_maxpool_ablation(config,tr_data,vocabulary,pretrained)
+    model = cnn.build_model(config,tr_data,vocabulary,pretrained)
 
     # select hardest training samples from preliminary training
     if config.getint('training','sample_hard'):
@@ -244,7 +244,7 @@ if not int(config['model']['use_saved_model']):    # train new model
             #print('Epoch{0}'.format(count))
             #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=5, batch_size=100, sample_weight=sample_weight) #callbacks=[evaluation_function]
             #count += 5
-        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=20, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function])
+        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=6, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function])
             #count += 1
 
         #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function])

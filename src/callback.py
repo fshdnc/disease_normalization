@@ -35,7 +35,7 @@ def evaluate(data_mentions, predictions, data_y):
 	return accuracy
 
 class EarlyStoppingRankingAccuracy(Callback):
-	''' Ranking accuracy callback with early stopping.
+	''' Ranking accuracy callback with early stopping.Test
 
 	'''
 	def __init__(self, conf, val_data):
