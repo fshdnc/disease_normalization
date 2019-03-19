@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 from keras.callbacks import Callback
 from datetime import datetime
+import model_tools
 
 def evaluate(data_mentions, predictions, data_y):
 	'''
@@ -35,7 +36,7 @@ def evaluate(data_mentions, predictions, data_y):
 	return accuracy
 
 class EarlyStoppingRankingAccuracy(Callback):
-	''' Ranking accuracy callback with early stopping.Test
+	''' Ranking accuracy callback with early stopping.
 
 	'''
 	def __init__(self, conf, val_data):
@@ -61,10 +62,10 @@ class EarlyStoppingRankingAccuracy(Callback):
 
 	def on_epoch_end(self, epoch, logs={}):
 		self.losses.append(logs.get('loss'))
-		before = datetime.now()
+		#before = datetime.now()
 		test_y = self.model.predict(self.val_data.x)
-		after = datetime.now()
-		logger.info('Time taken for prediction without speedup:{0}'.format(after-before))
+		#after = datetime.now()
+		#logger.info('Time taken for prediction without speedup:{0}'.format(after-before))
 		evaluation_parameter = evaluate(self.val_data.mentions, test_y, self.val_data.y)
 		self.accuracy.append(evaluation_parameter)
 
@@ -79,15 +80,15 @@ class EarlyStoppingRankingAccuracy(Callback):
 				self.stopped_epoch = epoch
 				self.model.stop_training = True
 		if self.save and self.model.stop_training:
-			from model_tools import save_predictions
 			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
-			save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+			model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
 		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
 		return
 
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -147,15 +148,15 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 				self.stopped_epoch = epoch
 				self.model.stop_training = True
 		if self.save and self.model.stop_training:
-			from model_tools import save_predictions
 			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
-			save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+			model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
 		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
 		return
 
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
 		return
 
 	def on_batch_end(self, batch, logs={}):
