@@ -302,3 +302,131 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
     model.compile(optimizer='adadelta', loss=AdaptedMaxMarginLoss(track_obj))
 
     return model
+
+
+def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    encoded_mentions = embedding_layer(inp_mentions)
+    encoded_candidates = embedding_layer(inp_candidates)
+
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')
+    conv_mentions = SharedConv(encoded_mentions)
+    conv_candidates = SharedConv(encoded_candidates)
+
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+    if conf.getint('embedding','elmo'):
+        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(inp_candidates_elmo)
+        pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
+        pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
+        v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
+
+    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
+    if int(conf['candidate']['use']):
+        concatenate_list.append(inp_scores)
+    if conf.getint('embedding','elmo'):
+        concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    from keras import optimizers
+    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
+    adam = optimizers.Adam(lr=0.001, epsilon=None, decay=0.0)
+    #model.compile(optimizer='adadelta', loss='binary_crossentropy')
+    logger.info('Using adam, default learning rate.')
+    model.compile(optimizer=adam, loss='binary_crossentropy')
+
+    return model
+
+
+def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretrained):
+    '''
+    Model to speed up forward pass, used in callback for evaluation
+    '''
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    mentions = model_mention.predict(corpus_padded) # (787, 50)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'],pretrained)
+    candidates = model_candidate.predict(concept_padded) # (67782,50)
+    logger.info('Formatting pooled mentions and candidates...')
+    # from sample import no_cangen_format_x
+    from sample import sped_up_format_x
+    convoluted_input = sped_up_format_x(mentions,candidates)
+    model_sem = _forward_pass_speedup_sem(model,convoluted_input)
+    return convoluted_input, model_sem
+
+def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    encoded_mentions = embedding_layer(inp_mentions)
+    encoded_candidates = embedding_layer(inp_candidates)
+
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')
+    conv_mentions = SharedConv(encoded_mentions)
+    conv_candidates = SharedConv(encoded_candidates)
+
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+    if conf.getint('embedding','elmo'):
+        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(inp_candidates_elmo)
+        pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
+        pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
+        v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
+
+    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+
+    prediction_layer = Dense(1,activation='sigmoid')(v_sem)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    from keras import optimizers
+    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
+    model.compile(optimizer='adadelta', loss='binary_crossentropy')
+
+    return model
+
+def _forward_pass_speedup_sem_xDense(original_model,convoluted_x):
+    layers = ['semantic_similarity_layer_1','dense_1']
+    v_sem = original_model.get_layer(layers[0])
+    d1 = original_model.get_layer(layers[1])
+
+    pooled_mentions = Input(shape=(convoluted_x[0].shape[1],),dtype='float32', name='pooled_mentions')
+    pooled_candidates = Input(shape=(convoluted_x[1].shape[1],),dtype='float32', name='pooled_candidates')
+    sem = semantic_similarity_layer(weights = v_sem.get_weights())([pooled_mentions,pooled_candidates])
+    prediction_layer = Dense(d1.units, activation=d1.activation,weights=d1.get_weights())(sem)
+    
+    input_list = [pooled_mentions, pooled_candidates]
+    model_part = Model(inputs=input_list, outputs=prediction_layer)
+    return model_part
+
+def forward_pass_speedup_shared_encoder_xDense(model,corpus_padded,concept_padded,pretrained):
+    '''
+    Model to speed up forward pass, used in callback for evaluation
+    '''
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    mentions = model_mention.predict(corpus_padded) # (787, 50)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'],pretrained)
+    candidates = model_candidate.predict(concept_padded) # (67782,50)
+    logger.info('Formatting pooled mentions and candidates...')
+    # from sample import no_cangen_format_x
+    from sample import sped_up_format_x
+    convoluted_input = sped_up_format_x(mentions,candidates)
+    model_sem = _forward_pass_speedup_sem_xDense(model,convoluted_input)
+    return convoluted_input, model_sem

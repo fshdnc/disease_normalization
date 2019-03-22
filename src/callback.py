@@ -136,6 +136,148 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 		logger.info('Time taken for prediction with speedup:{0}'.format(after-before))
 		evaluation_parameter = evaluate(self.val_data.mentions, test_y, self.val_data.y)
 		self.accuracy.append(evaluation_parameter)
+		self.convoluted_input = None
+		self.prediction_model = None
+
+		if evaluation_parameter > self.best:
+			self.best = evaluation_parameter
+			self.model.save(self.model_path)
+			self.wait = 0
+			# something here to print trec_eval doc
+		else:
+			self.wait += 1
+			if self.wait > int(self.conf['training']['patience']):
+				self.stopped_epoch = epoch
+				self.model.stop_training = True
+		if self.save and self.model.stop_training:
+			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
+			model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+		return
+
+	def on_train_end(self, logs=None):
+		if self.stopped_epoch > 0:
+			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
+		return
+
+	def on_batch_end(self, batch, logs={}):
+		self.losses.append(logs.get('loss'))
+		return
+
+
+class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
+	''' Ranking accuracy callback with early stopping.
+
+	'''
+	def __init__(self, conf, val_data, concept_padded, corpus_padded, pretrained):
+		super().__init__()
+
+		self.conf = conf
+		self.val_data = val_data
+		self.concept_padded = concept_padded
+		self.corpus_padded = corpus_padded
+		self.pretrained = pretrained
+		self.convoluted_input = None
+		self.prediction_model = None
+
+		self.best = 0 # best accuracy
+		self.wait = 0
+		self.stopped_epoch = 0
+		self.patience = int(conf['training']['patience'])
+		self.model_path = conf['model']['path_model_whole']
+
+		self.save = int(self.conf['settings']['save_prediction'])
+
+	def on_train_begin(self, logs={}):
+		self.losses = []
+		self.accuracy = []
+
+		self.wait = 0
+		return
+
+	def on_epoch_end(self, epoch, logs={}):
+		self.losses.append(logs.get('loss'))
+
+		from cnn import forward_pass_speedup_shared_encoder
+		before = datetime.now()
+		self.convoluted_input, self.prediction_model = forward_pass_speedup_shared_encoder(self.model,self.corpus_padded,self.concept_padded,self.pretrained)
+		test_y = self.prediction_model.predict(self.convoluted_input)
+		after = datetime.now()
+		logger.info('Time taken for prediction with speedup:{0}'.format(after-before))
+		evaluation_parameter = evaluate(self.val_data.mentions, test_y, self.val_data.y)
+		self.accuracy.append(evaluation_parameter)
+		self.convoluted_input = None
+		self.prediction_model = None
+
+		if evaluation_parameter > self.best:
+			self.best = evaluation_parameter
+			self.model.save(self.model_path)
+			self.wait = 0
+			# something here to print trec_eval doc
+		else:
+			self.wait += 1
+			if self.wait > int(self.conf['training']['patience']):
+				self.stopped_epoch = epoch
+				self.model.stop_training = True
+		if self.save and self.model.stop_training:
+			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
+			model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+		return
+
+	def on_train_end(self, logs=None):
+		if self.stopped_epoch > 0:
+			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
+		return
+
+	def on_batch_end(self, batch, logs={}):
+		self.losses.append(logs.get('loss'))
+		return
+
+class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
+	''' Ranking accuracy callback with early stopping.
+
+	'''
+	def __init__(self, conf, val_data, concept_padded, corpus_padded, pretrained, create_spedup_model):
+		super().__init__()
+
+		self.conf = conf
+		self.val_data = val_data
+		self.concept_padded = concept_padded
+		self.corpus_padded = corpus_padded
+		self.pretrained = pretrained
+		self.convoluted_input = None
+		self.prediction_model = None
+		self.create_spedup_model = create_spedup_model
+
+		self.best = 0 # best accuracy
+		self.wait = 0
+		self.stopped_epoch = 0
+		self.patience = int(conf['training']['patience'])
+		self.model_path = conf['model']['path_model_whole']
+
+		self.save = int(self.conf['settings']['save_prediction'])
+
+	def on_train_begin(self, logs={}):
+		self.losses = []
+		self.accuracy = []
+
+		self.wait = 0
+		return
+
+	def on_epoch_end(self, epoch, logs={}):
+		self.losses.append(logs.get('loss'))
+		before = datetime.now()
+		self.convoluted_input, self.prediction_model = self.create_spedup_model(self.model,self.corpus_padded,self.concept_padded,self.pretrained)
+		test_y = self.prediction_model.predict(self.convoluted_input)
+		after = datetime.now()
+		logger.debug('Time taken for prediction with speedup:{0}'.format(after-before))
+		evaluation_parameter = evaluate(self.val_data.mentions, test_y, self.val_data.y)
+		self.accuracy.append(evaluation_parameter)
+		self.convoluted_input = None
+		self.prediction_model = None
 
 		if evaluation_parameter > self.best:
 			self.best = evaluation_parameter

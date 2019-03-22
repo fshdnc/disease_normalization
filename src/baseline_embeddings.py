@@ -1,4 +1,5 @@
-'''Word2Vec Baseline'''
+'''Word2Vec Baseline
+python3 baseline_embeddings.py path_to_embedding'''
 
 import logging
 import logging.config

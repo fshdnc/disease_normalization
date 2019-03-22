@@ -136,17 +136,6 @@ print('Accuracy:{0}'.format(correct/len(corpus_test.names)))
 # 	exact match: 142/960, acc: 0.147916667
 # 	lowercase: 442/960, acc: 0.460416664
 
-# for printing out the test set and correct concepts
-for i in incorrect_indices:
-# for i,n in zip(corpus_test.ids,corpus_test.names):
-    print('\n')
-    try:
-        print(corpus_test.names[i])
-        print(dictionary.loaded[corpus_test.ids[i][0]])
-    except KeyError:
-        print(corpus_test.names[i])
-        print('no dict item found')
-
 #correct = 0
 incorrect = 0
 incorrect_indices = []
@@ -162,3 +151,15 @@ for i, mention_name, mention_gold in zip(range(len(corpus_test.names)),corpus_te
         incorrect += 1
         incorrect_indices.append(i)
 #print('Accuracy:{0}'.format(correct/len(corpus_test.names)))
+
+
+# for printing out the test set and correct concepts
+for i in incorrect_indices:
+# for i,n in zip(corpus_test.ids,corpus_test.names):
+    print('\n')
+    try:
+        print(corpus_test.names[i])
+        print(dictionary.loaded[corpus_test.ids[i][0]])
+    except KeyError:
+        print(corpus_test.names[i])
+        print('no dict item found')
