@@ -115,3 +115,38 @@ def sample_hard_ratio(r, z, data_mentions, predictions, data_y):
 	print('no oracle found:',oracle_zero)
 	hard_and_gold.sort()
 	return np.array(hard_and_gold),new_mentions
+
+
+def sample_for_individual_mention(conf,corpus,concepts,idx):
+	'''
+	input: corpus obj, concept obj, index of corpus object
+	return: index of picked concept name, randomly sampled negatives
+	can also return: the indices of other unpicked positives
+	'''
+	mention = corpus.names[idx]
+	ID = corpus.ids[idx]
+
+	correct_indices = []
+	for i,v in enumerate(concepts.ids):
+		# FIXME: not taking into account mentions with multiple mappings
+		if v in ID:
+			correct_indices.append(i)
+	if correct_indices: # FIXME: 142 without canonical ids instead of 115
+		correct = [*zip(correct_indices,np.array(concepts.names)[np.array(correct_indices)].tolist())]
+
+		import difflib
+		# FIXME: maybe use a better way to measure string similarity
+		scores = [(i,difflib.SequenceMatcher(None, a=mention.lower(), b=name.lower()).ratio()) for i,name in correct]
+		picked = [sorted(scores, key = lambda i: i[1],reverse=True)[0][0]]
+		# others = sorted([i for i, score in scores if i!=picked])
+
+		import random
+		sampled_neg = sorted(random.sample(list(set([*range(len(concepts.names))])-set(correct_indices)),conf.getint('sample','neg_count')))
+		
+	else: # ignore the ones whose IDs are not included in the vocab
+		picked = []
+		sampled_neg = []
+
+	return (picked,sampled_neg)
+
+

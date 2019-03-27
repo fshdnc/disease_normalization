@@ -260,7 +260,7 @@ if not int(config['model']['use_saved_model']):    # train new model
                 logger.info('Subsampled data saved.')
         
                 #new_tr_data = pickle.load(open('gitig_new_tr_data_ratio.pickle','rb'))
-                sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
+                sample_weight = np.array([19 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
                 hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=1, batch_size=100, sample_weight=sample_weight, callbacks=[evaluation_function])
                 #logger.info('Saving weights from epoch {0}.'.format(ep))
                 #datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -269,13 +269,13 @@ if not int(config['model']['use_saved_model']):    # train new model
         
 
         eps = int(config['training']['epoch'])
-        sample_weight = np.array([1 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
+        sample_weight = np.array([19 if l==np.array([1]) else 1/19 for l in new_tr_data.y])
         #count = 1
         #for i in range(5):
             #print('Epoch{0}'.format(count))
             #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=5, batch_size=100, sample_weight=sample_weight) #callbacks=[evaluation_function]
             #count += 5
-        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=6, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function,evaluation_function_1])
+        hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=6, batch_size=100, sample_weight=sample_weight,callbacks=[evaluation_function])
             #count += 1
 
         #hist = model.fit(new_tr_data.x, new_tr_data.y, epochs=eps, batch_size=100, callbacks=[evaluation_function,evaluation_function_1])
@@ -293,8 +293,8 @@ if not int(config['model']['use_saved_model']):    # train new model
         '''
         hist = model.fit(tr_data.x, tr_data.y, epochs=int(config['training']['epoch']), batch_size=100, callbacks=[evaluation_function])
 
-    logger.info('Saving trained model...')
-    model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
+    # logger.info('Saving trained model...')
+    # model_tools.save_model(model,config['model']['path_model_architecture'],config['model']['path_model_weights'])
 
 else:
     from cnn import semantic_similarity_layer

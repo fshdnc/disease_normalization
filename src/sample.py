@@ -291,3 +291,60 @@ def load_no_cangen_data(pickled_objects,training_data,val_data):
         for o,d in zip(pickled_object,[data.x,data.y,data.mentions]):
             d = o[:]
     '''
+
+def sample_format_mentions(sampled,corpus_names):
+    '''
+    Input:
+        sampled: list of (picked_pos, list_of_sampled_neg)
+    Output: list of (start,end,'mention')
+    '''
+    assert len(corpus_names) == len(sampled)
+    mention_list = []
+    start = 0
+    end = 0
+    for (picked_pos, sampled_neg),mention in zip(sampled,corpus_names):
+        can_no = len(picked_pos) + len(sampled_neg)
+        end = can_no + end
+        mention_list.append((start,end,mention))
+        start = end
+    return mention_list
+    
+def _sample_format_x0(corpus_padded,formatted_mention):
+    '''
+    Input:
+        formatted_mention: list of (start,end,'mention')
+        corpus_padded: list of padded mentions
+    '''
+    assert len(formatted_mention) == len(corpus_padded)
+    x0 = []
+    for (start, end, tok),padded in zip(formatted_mention,corpus_padded):
+        for i in range(end-start):
+            x0.append(padded)
+    return np.array(x0)
+
+def _sample_format_x1(sampled,concept_padded):
+    '''
+    Input:
+        sampled: list of (picked_pos, list_of_sampled_neg)
+    '''
+    #x1 = np.array([])
+    #for picked_pos,sampled_neg in sampled:
+    #    x1 = np.concatenate((x1, np.array(concept_padded)[np.array(picked_pos+sampled_neg)]),axis=0)
+    x1 = []
+    for picked_pos,sampled_neg in sampled:
+        if picked_pos and sampled_neg:
+            x1.extend(np.array(concept_padded)[np.array(picked_pos+sampled_neg)].tolist())
+    return np.array(x1) 
+
+def sample_format_x(sampled,corpus_padded,concept_padded,formatted_mention):
+    x0 = _sample_format_x0(corpus_padded,formatted_mention)
+    x1 = _sample_format_x1(sampled,concept_padded)
+    assert len(x0)==len(x1)
+    return [x0,x1]
+
+def sample_format_y(sampled):
+    y = []
+    for picked_pos,sampled_neg in sampled:
+        y.append([1]*len(picked_pos)+[0]*len(sampled_neg))
+    y = [item for sublist in y for item in sublist]
+    return np.array(y)

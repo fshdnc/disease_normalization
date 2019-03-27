@@ -10,8 +10,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 from keras.callbacks import Callback
+from keras.models import load_model
 from datetime import datetime
 import model_tools
+from cnn import semantic_similarity_layer
+
+def save_model(model, path):
+	now = datetime.now().strftime('%Y%m%d-%H%M%S')
+	logger.info('Saving best model to {0}'.format(path+now))
+	model_name = path + now + '.json'
+	weights_name = path + now + '.h5'
+	model_tools.save_model(model, model_name, weights_name)
 
 def evaluate(data_mentions, predictions, data_y):
 	'''
@@ -88,7 +97,8 @@ class EarlyStoppingRankingAccuracy(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
+		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+		save_model(self.model, self.conf['model']['path'])
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -158,7 +168,8 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
+		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+		save_model(self.model, self.conf['model']['path'])
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -229,7 +240,8 @@ class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
+		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+		save_model(self.model, self.conf['model']['path'])
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -298,7 +310,8 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		model_tools.save_model(self.model, self.conf['model']['path_model_architecture'],self.conf['model']['path_model_weights'])
+		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+		save_model(self.model, self.conf['model']['path'])
 		return
 
 	def on_batch_end(self, batch, logs={}):

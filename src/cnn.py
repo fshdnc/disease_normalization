@@ -7,19 +7,22 @@ from keras.layers import Input, Embedding, Concatenate, Dense, Conv1D, GlobalMax
 import logging
 logger = logging.getLogger(__name__)
 
-# needed input: vocabulary, pretrained, trainging_data
+def return_optimizer(conf):
+    from keras import optimizers
+    adam = optimizers.Adam(lr=0.0005, epsilon=None, decay=0.0)
+    adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
+    adadelta = optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
+    opts = {'adam':adam,'adagrad':adagrad,'adadelta':adadelta}
+    return opts[conf['cnn']['optimizer']]
+
+def return_loss(conf):
+    opts = {'binary_crossentropy':'binary_crossentropy','ranking_loss':ranking_loss}
+    return opts[conf['cnn']['loss']]
 
 def print_input(training_data):
     for i in range(len(training_data.x)):
         logger.info('training_data.x[{0}]\tshape:{1}\tdtype:{2}'.format(i,training_data.x[i].shape,training_data.x[i].dtype))
 
-#  Remove the warning thrown (theano)
-#  Add Vsem layer (custom layer)
-#  Validation data
-#  Use the whole training data
-#  Custom callback, early stopping?
-
-#  Add Vsem layer (custom layer)
 from keras import backend as K
 from keras.engine.topology import Layer
 
@@ -40,9 +43,12 @@ class semantic_similarity_layer(Layer):
         except ValueError:
             raise ValueError('input_shape must be a 2-element list, each containing a two-element tuple.')
 
+        import keras.initializers
+        #ini = keras.initializers.Identity(gain=1.0)
+        ini = 'uniform'
         self.M = self.add_weight(name='M',
                                  shape=(shape_m[1], shape_c[1]),
-                                 initializer='uniform',
+                                 initializer=ini,
                                  trainable=True)
         import numpy as np
         #assert self.M.dtype is np.dtype('float32')
@@ -76,6 +82,13 @@ class semantic_similarity_layer(Layer):
                   'name': self.name}
         return config
 '''
+
+def ranking_loss(y_true, y_pred):
+    # y_true is meaningless for us.
+    from keras import backend as K
+    pos = K.tile(y_pred[:1], (K.shape(y_pred)[0]-1, 1)) # +1 is just a bias 
+    margin = K.mean(pos-y_pred[1:])
+    return -margin # We want to maximize margin
 
 def build_model(conf,training_data,vocabulary,pretrained):
     inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
@@ -126,9 +139,7 @@ def build_model(conf,training_data,vocabulary,pretrained):
         input_list.extend([inp_mentions_elmo,inp_candidates_elmo])
 
     model = Model(inputs=input_list, outputs=prediction_layer)
-    from keras import optimizers
-    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
-    model.compile(optimizer='adadelta', loss='binary_crossentropy')
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
     return model
 
@@ -253,9 +264,7 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     input_list = [inp_mentions,inp_candidates]
 
     model = Model(inputs=input_list, outputs=prediction_layer)
-    from keras import optimizers
-    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
-    model.compile(optimizer='adadelta', loss='binary_crossentropy')
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
     return model
 
@@ -296,10 +305,8 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
     input_list = [inp_mentions,inp_candidates]
 
     model = Model(inputs=input_list, outputs=prediction_layer)
-    from keras import optimizers
-    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
     from nn.loss import AdaptedMaxMarginLoss
-    model.compile(optimizer='adadelta', loss=AdaptedMaxMarginLoss(track_obj))
+    model.compile(optimizer=return_optimizer(conf), loss=AdaptedMaxMarginLoss(track_obj))
 
     return model
 
@@ -342,12 +349,7 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
     input_list = [inp_mentions,inp_candidates]
 
     model = Model(inputs=input_list, outputs=prediction_layer)
-    from keras import optimizers
-    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
-    adam = optimizers.Adam(lr=0.001, epsilon=None, decay=0.0)
-    #model.compile(optimizer='adadelta', loss='binary_crossentropy')
-    logger.info('Using adam, default learning rate.')
-    model.compile(optimizer=adam, loss='binary_crossentropy')
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
     return model
 
@@ -396,9 +398,7 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
     input_list = [inp_mentions,inp_candidates]
 
     model = Model(inputs=input_list, outputs=prediction_layer)
-    from keras import optimizers
-    #adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
-    model.compile(optimizer='adadelta', loss='binary_crossentropy')
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
     return model
 
