@@ -10,9 +10,15 @@ logger = logging.getLogger(__name__)
 
 def return_optimizer(conf):
     from keras import optimizers
-    adam = optimizers.Adam(lr=0.00005, epsilon=None, decay=0.0)
-    adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
-    adadelta = optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
+    if conf.getfloat('cnn','lr'):
+        lr = conf.getfloat('cnn','lr')
+        adam = optimizers.Adam(lr=lr, epsilon=None, decay=0.0) # default lr=0.001
+        adagrad = optimizers.Adagrad(lr=lr, epsilon=None, decay=0.0)
+        adadelta = optimizers.Adadelta(lr=lr, rho=0.95, epsilon=None, decay=0.0)    
+    else:
+        adam = optimizers.Adam(lr=0.001, epsilon=None, decay=0.0) # default lr=0.001
+        adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
+        adadelta = optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
     opts = {'adam':adam,'adagrad':adagrad,'adadelta':adadelta}
     return opts[conf['cnn']['optimizer']]
 

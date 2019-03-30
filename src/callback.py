@@ -12,11 +12,12 @@ logger = logging.getLogger(__name__)
 from keras.callbacks import Callback
 from keras.models import load_model
 from datetime import datetime
+import io
+
 import model_tools
 from cnn import semantic_similarity_layer
 
-def save_model(model, path):
-	now = datetime.now().strftime('%Y%m%d-%H%M%S')
+def save_model(model, path,now):
 	logger.info('Saving best model to {0}'.format(path+now))
 	model_name = path + now + '.json'
 	weights_name = path + now + '.h5'
@@ -44,6 +45,27 @@ def evaluate(data_mentions, predictions, data_y):
 	logger.info('Accuracy: {0}, Correct: {1}, Total: {2}'.format(accuracy,correct,total))
 	return accuracy
 
+def write_training_info(conf,path):
+	import configparser
+	with open(path,'w',encoding='utf-8') as configfile:    # save
+		conf.write(configfile)
+
+class Resample(Callback):
+	def __init__(self, tr_data, sampling_function,conf,positives,concept,corpus_train_padded):
+		super().__init__()
+		self.tr_data = tr_data
+		self.sampling_function = sampling_function
+		self.conf = conf
+		self.positives = positives
+		self.concept = concept
+		self.corpus_train_padded = corpus_train_padded
+	
+	def on_epoch_end(self,epoch,logs=None):
+		self.tr_data = self.sampling_function(self.conf,self.positives,self.concept,self.corpus_train_padded)
+		print(self.tr_data.x[0][0])
+		return
+
+
 class EarlyStoppingRankingAccuracy(Callback):
 	''' Ranking accuracy callback with early stopping.
 
@@ -61,12 +83,18 @@ class EarlyStoppingRankingAccuracy(Callback):
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
+		self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
+		self.history = self.conf['settings']['history'] + self.now + '.txt'
+		write_training_info(self.conf,self.history)
 
 	def on_train_begin(self, logs={}):
 		self.losses = []
 		self.accuracy = []
 
 		self.wait = 0
+		with open(self.history,'a',encoding='utf-8') as fh:
+		# Pass the file handle in as a lambda function to make it callable
+			self.model.summary(print_fn=lambda x: fh.write(x + '\n'))
 		return
 
 	def on_epoch_end(self, epoch, logs={}):
@@ -77,6 +105,8 @@ class EarlyStoppingRankingAccuracy(Callback):
 		#logger.info('Time taken for prediction without speedup:{0}'.format(after-before))
 		evaluation_parameter = evaluate(self.val_data.mentions, test_y, self.val_data.y)
 		self.accuracy.append(evaluation_parameter)
+		with open(self.history,'a',encoding='utf-8') as f:
+			f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
 
 		if evaluation_parameter > self.best:
 			self.best = evaluation_parameter
@@ -91,14 +121,15 @@ class EarlyStoppingRankingAccuracy(Callback):
 		if self.save and self.model.stop_training:
 			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
 			model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
-		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch+1,self.model.stop_training))
 		return
 
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
-		save_model(self.model, self.conf['model']['path'])
+		if self.conf.getint('model','save'):
+			self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -127,12 +158,18 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
+		self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
+		self.history = self.conf['settings']['history'] + self.now + '.txt'
+		write_training_info(self.conf,self.history)
 
 	def on_train_begin(self, logs={}):
 		self.losses = []
 		self.accuracy = []
 
 		self.wait = 0
+		with open(self.history,'a',encoding='utf-8') as fh:
+		# Pass the file handle in as a lambda function to make it callable
+			self.model.summary(print_fn=lambda x: fh.write(x + '\n'))
 		return
 
 	def on_epoch_end(self, epoch, logs={}):
@@ -148,6 +185,9 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 		self.accuracy.append(evaluation_parameter)
 		self.convoluted_input = None
 		self.prediction_model = None
+		with open(self.history,'a',encoding='utf-8') as f:
+			f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
+
 
 		if evaluation_parameter > self.best:
 			self.best = evaluation_parameter
@@ -168,8 +208,9 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
-		save_model(self.model, self.conf['model']['path'])
+		if self.conf.getint('model','save'):
+			self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -199,12 +240,18 @@ class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
+		self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
+		self.history = self.conf['settings']['history'] + self.now + '.txt'
+		write_training_info(self.conf,self.history)
 
 	def on_train_begin(self, logs={}):
 		self.losses = []
 		self.accuracy = []
 
 		self.wait = 0
+		with open(self.history,'a',encoding='utf-8') as fh:
+		# Pass the file handle in as a lambda function to make it callable
+			self.model.summary(print_fn=lambda x: fh.write(x + '\n'))
 		return
 
 	def on_epoch_end(self, epoch, logs={}):
@@ -220,6 +267,9 @@ class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
 		self.accuracy.append(evaluation_parameter)
 		self.convoluted_input = None
 		self.prediction_model = None
+		with open(self.history,'a',encoding='utf-8') as f:
+			f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
+
 
 		if evaluation_parameter > self.best:
 			self.best = evaluation_parameter
@@ -240,8 +290,9 @@ class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
-		save_model(self.model, self.conf['model']['path'])
+		if self.conf.getint('model','save'):
+			self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
 	def on_batch_end(self, batch, logs={}):
@@ -271,12 +322,18 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
+		self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
+		self.history = self.conf['settings']['history'] + self.now + '.txt'
+		write_training_info(self.conf,self.history)
 
 	def on_train_begin(self, logs={}):
 		self.losses = []
 		self.accuracy = []
 
 		self.wait = 0
+		with open(self.history,'a',encoding='utf-8') as fh:
+		# Pass the file handle in as a lambda function to make it callable
+			self.model.summary(print_fn=lambda x: fh.write(x + '\n'))
 		return
 
 	def on_epoch_end(self, epoch, logs={}):
@@ -290,6 +347,9 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 		self.accuracy.append(evaluation_parameter)
 		self.convoluted_input = None
 		self.prediction_model = None
+		with open(self.history,'a',encoding='utf-8') as f:
+			f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
+
 
 		if evaluation_parameter > self.best:
 			self.best = evaluation_parameter
@@ -310,8 +370,9 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
-		save_model(self.model, self.conf['model']['path'])
+		if self.conf.getint('model','save'):
+			self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
 	def on_batch_end(self, batch, logs={}):
