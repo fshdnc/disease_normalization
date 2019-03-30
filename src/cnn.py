@@ -3,13 +3,14 @@
 
 from keras.models import Model
 from keras.layers import Input, Embedding, Concatenate, Dense, Conv1D, GlobalMaxPooling1D, Flatten
+from keras import layers
 
 import logging
 logger = logging.getLogger(__name__)
 
 def return_optimizer(conf):
     from keras import optimizers
-    adam = optimizers.Adam(lr=0.0005, epsilon=None, decay=0.0)
+    adam = optimizers.Adam(lr=0.00005, epsilon=None, decay=0.0)
     adagrad = optimizers.Adagrad(lr=0.001, epsilon=None, decay=0.0)
     adadelta = optimizers.Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
     opts = {'adam':adam,'adagrad':adagrad,'adadelta':adadelta}
@@ -99,12 +100,13 @@ def build_model(conf,training_data,vocabulary,pretrained):
         inp_mentions_elmo = Input(shape=(training_data.x[-2].shape[1],),dtype='float32', name='inp_mentions_elmo')
         inp_candidates_elmo = Input(shape=(training_data.x[-1].shape[1],),dtype='float32', name='inp_candidates_elmo')
 
-    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
-    encoded_mentions = embedding_layer(inp_mentions)
-    encoded_candidates = embedding_layer(inp_candidates)
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
-    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
     if conf.getint('embedding','elmo'):
@@ -114,7 +116,7 @@ def build_model(conf,training_data,vocabulary,pretrained):
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
-    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
     # list of layers for concatenation
     concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
@@ -124,12 +126,12 @@ def build_model(conf,training_data,vocabulary,pretrained):
         concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
 
     join_layer = Concatenate()(concatenate_list)
-    hidden_layer = Dense(64, activation='relu')(join_layer)
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
     if int(conf['settings']['imp_tr']):
         from keras.layers import Activation
         prediction_layer = Activation('sigmoid')(hidden_layer)
     else:
-        prediction_layer = Dense(1,activation='sigmoid')(hidden_layer)  
+        prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -183,21 +185,23 @@ ________________________________________________________________________________
 
 # Model to speed up forward pass, used in callback for evaluation
 
-def _forward_pass_speedup_conv(original_model,layers,pretrained):
+def _forward_pass_speedup_conv(original_model,layerss,pretrained):
     '''
     Input:
     original_model
-    layers: list of layer names, one of the two
-        ['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1']
-        ['inp_candidates','embedding_1','conv1d_2','global_max_pooling1d_2']
+    layerss: list of layer names, one of the two
+        ['inp_mentions','embedding_1','drop',conv1d_1','global_max_pooling1d_1']
+        ['inp_candidates','embedding_1','drop','conv1d_2','global_max_pooling1d_2']
     '''
-    terms = original_model.get_layer(layers[0])
-    emb = original_model.get_layer(layers[1])
-    conv = original_model.get_layer(layers[2])
+    terms = original_model.get_layer(layerss[0])
+    emb = original_model.get_layer(layerss[1])
+    drop = original_model.get_layer(layerss[2])
+    conv = original_model.get_layer(layerss[3])
 
     new_input_terms = Input(shape=(terms.input_shape[1],),dtype='int32', name='new_input_terms')
     new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=[pretrained])
-    encoded = new_emb(new_input_terms)
+    new_drop = layers.Dropout(drop.get_config()['rate'])
+    encoded = new_drop(new_emb(new_input_terms))
     new_conv = Conv1D(filters=conv.filters,kernel_size=conv.kernel_size[0],activation=conv.activation,weights=conv.get_weights())(encoded)
     gl_max_p = GlobalMaxPooling1D()(new_conv)
 
@@ -205,7 +209,7 @@ def _forward_pass_speedup_conv(original_model,layers,pretrained):
     return model_part
 
 def _forward_pass_speedup_sem(original_model,convoluted_x):
-    layers = ['semantic_similarity_layer_1','dense_1','dense_2']
+    layers = ['v_sem','hidden_layer','prediction_layer']
     v_sem = original_model.get_layer(layers[0])
     d1 = original_model.get_layer(layers[1])
     d2 = original_model.get_layer(layers[2])
@@ -226,9 +230,9 @@ def forward_pass_speedup(model,corpus_padded,concept_padded,pretrained):
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv_mentions','global_max_pooling1d_1'],pretrained)
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_2','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv_candidates','global_max_pooling1d_2'],pretrained)
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -247,18 +251,18 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
 
-    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     encoded_mentions = embedding_layer(inp_mentions)
     encoded_candidates = embedding_layer(inp_candidates)
 
-    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
-    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
 
-    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
-    prediction_layer = Dense(1,activation='sigmoid')(v_sem)  
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(v_sem)  
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -277,12 +281,12 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
         inp_mentions_elmo = Input(shape=(training_data.x[-2].shape[1],),dtype='float32', name='inp_mentions_elmo')
         inp_candidates_elmo = Input(shape=(training_data.x[-1].shape[1],),dtype='float32', name='inp_candidates_elmo')
 
-    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     encoded_mentions = embedding_layer(inp_mentions)
     encoded_candidates = embedding_layer(inp_candidates)
 
-    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(encoded_mentions) #input_shape=(2000,16,50)
-    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')(encoded_candidates) #input_shape=(2000,16,50)
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
     if conf.getint('embedding','elmo'):
@@ -292,14 +296,14 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
-    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
     # list of layers for concatenation
     concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
 
     join_layer = Concatenate()(concatenate_list)
-    hidden_layer = Dense(64, activation='relu')(join_layer)
-    prediction_layer = Dense(1,activation='sigmoid')(hidden_layer)  
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -315,11 +319,12 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
     inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
 
-    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
-    encoded_mentions = embedding_layer(inp_mentions)
-    encoded_candidates = embedding_layer(inp_candidates)
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv1d')
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
@@ -332,7 +337,7 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
-    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
     # list of layers for concatenation
     concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
@@ -342,8 +347,8 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
         concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
 
     join_layer = Concatenate()(concatenate_list)
-    hidden_layer = Dense(64, activation='relu')(join_layer)
-    prediction_layer = Dense(1,activation='sigmoid')(hidden_layer)  
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -358,9 +363,9 @@ def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretr
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -373,9 +378,10 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
     inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
 
-    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained])
-    encoded_mentions = embedding_layer(inp_mentions)
-    encoded_candidates = embedding_layer(inp_candidates)
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
 
     SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu')
     conv_mentions = SharedConv(encoded_mentions)
@@ -390,9 +396,9 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
-    v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
-    prediction_layer = Dense(1,activation='sigmoid')(v_sem)  
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(v_sem)  
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -403,7 +409,7 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
     return model
 
 def _forward_pass_speedup_sem_xDense(original_model,convoluted_x):
-    layers = ['semantic_similarity_layer_1','dense_1']
+    layers = ['v_sem','prediction_layer']
     v_sem = original_model.get_layer(layers[0])
     d1 = original_model.get_layer(layers[1])
 
@@ -420,13 +426,124 @@ def forward_pass_speedup_shared_encoder_xDense(model,corpus_padded,concept_padde
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
     from sample import sped_up_format_x
     convoluted_input = sped_up_format_x(mentions,candidates)
     model_sem = _forward_pass_speedup_sem_xDense(model,convoluted_input)
+    return convoluted_input, model_sem
+
+
+def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
+
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv1d')
+    conv_mentions = SharedConv(encoded_mentions)
+    conv_candidates = SharedConv(encoded_candidates)
+
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
+
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,cos_sim]
+    if int(conf['candidate']['use']):
+        concatenate_list.append(inp_scores)
+    if conf.getint('embedding','elmo'):
+        concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
+
+    return model
+
+
+def build_model_dot(conf,training_data,vocabulary,pretrained):
+    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
+
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=3,activation='relu',name='conv1d')
+    conv_mentions = SharedConv(encoded_mentions)
+    conv_candidates = SharedConv(encoded_candidates)
+
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
+    cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
+
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,cos_sim]
+    if int(conf['candidate']['use']):
+        concatenate_list.append(inp_scores)
+    if conf.getint('embedding','elmo'):
+        concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
+
+    return model
+
+def _forward_pass_speedup_dot(original_model,convoluted_x):
+    layerss = ['hidden_layer','prediction_layer']
+    d1 = original_model.get_layer(layerss[0])
+    d2 = original_model.get_layer(layerss[1])
+
+    pooled_mentions = Input(shape=(convoluted_x[0].shape[1],),dtype='float32', name='pooled_mentions')
+    pooled_candidates = Input(shape=(convoluted_x[1].shape[1],),dtype='float32', name='pooled_candidates')
+    cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
+    concatenate_list = [pooled_mentions,pooled_candidates,cos_sim]
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(d1.units, activation=d1.activation,weights=d1.get_weights())(join_layer)
+    prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(hidden_layer)
+    
+    input_list = [pooled_mentions, pooled_candidates]
+    model_part = Model(inputs=input_list, outputs=prediction_layer)
+    return model_part
+
+
+def forward_pass_speedup_shared_encoder_dot(model,corpus_padded,concept_padded,pretrained):
+    '''
+    Model to speed up forward pass, used in callback for evaluation
+    '''
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
+    mentions = model_mention.predict(corpus_padded) # (787, 50)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
+    candidates = model_candidate.predict(concept_padded) # (67782,50)
+    logger.info('Formatting pooled mentions and candidates...')
+    # from sample import no_cangen_format_x
+    from sample import sped_up_format_x
+    convoluted_input = sped_up_format_x(mentions,candidates)
+    model_sem = _forward_pass_speedup_dot(model,convoluted_input)
     return convoluted_input, model_sem

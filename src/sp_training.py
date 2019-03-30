@@ -8,6 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from keras.callbacks import Callback
+import random
 
 def sample_hard_total(n, data_mentions, predictions, data_y):
 	'''
@@ -116,12 +117,10 @@ def sample_hard_ratio(r, z, data_mentions, predictions, data_y):
 	hard_and_gold.sort()
 	return np.array(hard_and_gold),new_mentions
 
-
-def sample_for_individual_mention(conf,corpus,concepts,idx):
+def pick_positive_name(conf,corpus,concepts,idx):
 	'''
 	input: corpus obj, concept obj, index of corpus object
-	return: index of picked concept name, randomly sampled negatives
-	can also return: the indices of other unpicked positives
+	return: index of picked concept name, the indices of other unpicked positives
 	'''
 	mention = corpus.names[idx]
 	ID = corpus.ids[idx]
@@ -138,15 +137,26 @@ def sample_for_individual_mention(conf,corpus,concepts,idx):
 		# FIXME: maybe use a better way to measure string similarity
 		scores = [(i,difflib.SequenceMatcher(None, a=mention.lower(), b=name.lower()).ratio()) for i,name in correct]
 		picked = [sorted(scores, key = lambda i: i[1],reverse=True)[0][0]]
-		# others = sorted([i for i, score in scores if i!=picked])
+		others = sorted([i for i, score in scores if i!=picked])
 
-		import random
-		sampled_neg = sorted(random.sample(list(set([*range(len(concepts.names))])-set(correct_indices)),conf.getint('sample','neg_count')))
+		# import random
+		# sampled_neg = sorted(random.sample(list(set([*range(len(concepts.names))])-set(correct_indices)),conf.getint('sample','neg_count')))
 		
 	else: # ignore the ones whose IDs are not included in the vocab
 		picked = []
+		# sampled_neg = []
+		others = []
+
+	return (picked,others) #sampled_neg)
+
+def sample_for_individual_mention(positives,no_of_concepts,neg_count):
+	'''
+	input: ([ind_of_picked],[indices of other unpicked positives])
+	return: index of picked concept name, randomly sampled negatives
+	'''
+	if positives[0]:
+		correct_indices = positives[0]+positives[1]
+		sampled_neg = sorted(random.sample(list(set([*range(no_of_concepts)])-set(correct_indices)),neg_count))
+	else:
 		sampled_neg = []
-
-	return (picked,sampled_neg)
-
-
+	return (positives[0],sampled_neg)
