@@ -371,7 +371,10 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
 		if self.conf.getint('model','save'):
-			self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			try:
+				self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			except OSError:
+				pass
 			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
