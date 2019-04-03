@@ -97,6 +97,7 @@ def ranking_loss(y_true, y_pred):
     margin = K.mean(pos-y_pred[1:])
     return -margin # We want to maximize margin
 
+
 def build_model(conf,training_data,vocabulary,pretrained):
     inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
@@ -150,6 +151,41 @@ def build_model(conf,training_data,vocabulary,pretrained):
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
     return model
+
+
+def build_model_generator(conf,vocabulary,pretrained):
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
+
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
+
+    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
+
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,v_sem]
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
+
+    return model, entity_model, concept_model
 
 '''
 >>> model.summary()
