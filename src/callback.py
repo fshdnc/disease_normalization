@@ -31,11 +31,10 @@ def evaluate(data_mentions, predictions, data_y):
 	data_y: e.g. val_data.y, of the form [[0],[1],...,[0]]
 	'''
 	assert len(predictions) == len(data_y)
-	predictions = [item for sublist in predictions for item in sublist]
 	correct = 0
 	logger.warning('High chance of same prediction scores.')
 	for start, end, untok_mention in data_mentions:
-		index_prediction = np.argmax(predictions[start:end],axis=-1)
+		index_prediction = np.argmax(predictions[start:end],axis=0)
 		if data_y[start:end][index_prediction] == 1:
 		##index_gold = np.argmax(data_y[start:end],axis=0)
 		##if index_prediction == index_gold:
@@ -49,21 +48,6 @@ def write_training_info(conf,path):
 	import configparser
 	with open(path,'w',encoding='utf-8') as configfile:    # save
 		conf.write(configfile)
-
-class Resample(Callback):
-	def __init__(self, tr_data, sampling_function,conf,positives,concept,corpus_train_padded):
-		super().__init__()
-		self.tr_data = tr_data
-		self.sampling_function = sampling_function
-		self.conf = conf
-		self.positives = positives
-		self.concept = concept
-		self.corpus_train_padded = corpus_train_padded
-	
-	def on_epoch_end(self,epoch,logs=None):
-		self.tr_data = self.sampling_function(self.conf,self.positives,self.concept,self.corpus_train_padded)
-		print(self.tr_data.x[0][0])
-		return
 
 
 class EarlyStoppingRankingAccuracy(Callback):
@@ -79,7 +63,6 @@ class EarlyStoppingRankingAccuracy(Callback):
 		self.best = 0 # best accuracy
 		self.wait = 0
 		self.stopped_epoch = 0
-		self.patience = int(conf['training']['patience'])
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
@@ -155,7 +138,6 @@ class EarlyStoppingRankingAccuracySpedUp(Callback):
 		self.best = 0 # best accuracy
 		self.wait = 0
 		self.stopped_epoch = 0
-		self.patience = int(conf['training']['patience'])
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
@@ -238,7 +220,6 @@ class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
 		self.best = 0 # best accuracy
 		self.wait = 0
 		self.stopped_epoch = 0
-		self.patience = int(conf['training']['patience'])
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
@@ -321,7 +302,6 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 		self.best = 0 # best accuracy
 		self.wait = 0
 		self.stopped_epoch = 0
-		self.patience = int(conf['training']['patience'])
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
@@ -405,7 +385,6 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 		self.best = 0 # best accuracy
 		self.wait = 0
 		self.stopped_epoch = 0
-		self.patience = int(conf['training']['patience'])
 		self.model_path = conf['model']['path_model_whole']
 
 		self.save = int(self.conf['settings']['save_prediction'])
