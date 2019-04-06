@@ -32,12 +32,12 @@ config['corpus']['development_file'] = os.path.join(directory,'../../old-disease
 config['settings']['history'] = os.path.join(directory, '../gitig/log/')
 config['cnn']['filters'] = '20'
 config['cnn']['optimizer'] = 'adam'
-config['cnn']['lr'] = '0.00005'
-config['cnn']['loss'] = 'ranking_loss'
+config['cnn']['lr'] = '0.0001'
+config['cnn']['loss'] = 'binary_crossentropy'
 config['cnn']['dropout'] = '0.5'
 config['embedding']['length'] = '5'
 config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'd=50, p=5, ranking loss'
+config['note']['note'] = 'd=50, p=5, shared encoder, dot'
 #################################################
 if config.getint('settings','gpu'):
     import tensorflow as tf
@@ -206,18 +206,11 @@ def examples(config, concept, positives, vocab, neg_count=config.getint('sample'
     Builds positive and negative examples.
     """
     while True:
-        for (chosen_idx, idces), e_token_indices in positives:
-        #for span, concept_id in zip(corpus_dev_truncated.names,corpus_dev_truncated.ids):
-            #e_tokens = nltk.word_tokenize(span)
-            #e_token_indices = [vocab.get(text.lower(),1) for text in e_tokens]
-            
+        for (chosen_idx, idces), e_token_indices in positives:          
             if len(chosen_idx) ==1:
                 # FIXME: only taking into account those that have exactly one gold concept
-                # c_tokens = nltk.word_tokenize(concept.names[chosen_idx[0]])
                 c_token_indices = concept.vectorize[chosen_idx[0]]
             
-                #negative_concepts = [concept.names[i] for i in random.sample(list(set([*range(len(concept.names))])-set(idces)),neg_count)]
-                #negative_token_indices = [[vocab.get(t.lower(), 1) for t in nltk.word_tokenize(neg)] for neg in negative_concepts]
                 negative_token_indices = [concept.vectorize[i] for i in random.sample(list(set([*range(len(concept.names))])-set(idces)),neg_count)]
 
             entity_inputs = np.tile(pad_sequences([e_token_indices], padding='post', maxlen=config.getint('embedding','length')), (len(negative_token_indices)+1, 1)) # Repeat the same entity for all concepts
@@ -265,6 +258,48 @@ def evaluate_w_results(data_mentions, predictions, data_y, concept, history):
     return accuracy
 
 
+from keras.models import Model
+from keras.layers import Input, Embedding, Concatenate, Dense, Conv1D, GlobalMaxPooling1D, Flatten
+from keras import layers
+from cnn import semantic_similarity_layer
+def build_model_generator(conf,vocabulary,pretrained):
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
+
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')
+    conv_mentions = SharedConv(encoded_mentions)
+    conv_candidates = SharedConv(encoded_candidates)
+
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
+
+    cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
+    #v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
+
+    # list of layers for concatenation
+    concatenate_list = [pooled_mentions,pooled_candidates,cos_sim]
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    model.compile(optimizer=cnn.return_optimizer(conf), loss=cnn.return_loss(conf))
+
+    return model, entity_model, concept_model
+
+
 def predict(config, concept, positives, vocab, entity_model, concept_model, original_model,val_data,result=None):
     entity_examples = examples(config, concept, positives, vocab, neg_count=0)
 
@@ -278,15 +313,16 @@ def predict(config, concept, positives, vocab, entity_model, concept_model, orig
     from sample import sped_up_format_x
     convoluted_input = sped_up_format_x(entity_encodings,concept_encodings)
     
-    layers = ['v_sem','hidden_layer','prediction_layer']
-    v_sem = original_model.get_layer(layers[0])
-    d1 = original_model.get_layer(layers[1])
-    d2 = original_model.get_layer(layers[2])
+    layerss = ['v_sem','hidden_layer','prediction_layer']
+    #v_sem = original_model.get_layer(layers[0])
+    d1 = original_model.get_layer(layerss[1])
+    d2 = original_model.get_layer(layerss[2])
 
     entity_encodings = Input(shape=(convoluted_input[0].shape[1],),dtype='float32', name='entity_encodings')
     concept_encodings = Input(shape=(convoluted_input[1].shape[1],),dtype='float32', name='concept_encodings')
-    sem = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
-    concatenate_list = [entity_encodings,concept_encodings,sem]
+    #sem = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
+    cos_sim = layers.dot([entity_encodings, concept_encodings], axes=-1, normalize=True, name='cos_sim')
+    concatenate_list = [entity_encodings,concept_encodings,cos_sim]
     join_layer = Concatenate()(concatenate_list)
     hidden_layer = Dense(d1.units, activation=d1.activation,weights=d1.get_weights())(join_layer)
     prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(hidden_layer)
@@ -407,7 +443,7 @@ import cnn, model_tools, callback
 
 config['note']['note'] = 'test if callback works'
 
-model, entity_model, concept_model = cnn.build_model_generator(config,vocabulary,pretrained)
+model, entity_model, concept_model = build_model_generator(config,vocabulary,pretrained)
 evaluation_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, val_data_truncated)
 train_examples = examples(config, concept, positives_training, vocabulary)
 dev_examples = examples(config, concept, positives_dev_truncated, vocabulary)

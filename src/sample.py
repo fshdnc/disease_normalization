@@ -348,3 +348,39 @@ def sample_format_y(sampled):
         y.append([1]*len(picked_pos)+[0]*len(sampled_neg))
     y = [item for sublist in y for item in sublist]
     return np.array(y)
+
+def examples(conf, concept, positives, vocab, neg_count=None):
+    """
+    Builds positive and negative examples.
+    """
+    if not neg_count:
+        neg_count = conf.getint('sample','neg_count')
+    while True:
+        for (chosen_idx, idces), e_token_indices in positives:          
+            if len(chosen_idx) ==1:
+                # FIXME: only taking into account those that have exactly one gold concept
+                c_token_indices = concept.vectorize[chosen_idx[0]]
+            
+                negative_token_indices = [concept.vectorize[i] for i in random.sample(list(set([*range(len(concept.names))])-set(idces)),neg_count)]
+
+            entity_inputs = np.tile(pad_sequences([e_token_indices], padding='post', maxlen=conf.getint('embedding','length')), (len(negative_token_indices)+1, 1)) # Repeat the same entity for all concepts
+            concept_inputs = pad_sequences([c_token_indices]+negative_token_indices, padding='post', maxlen=conf.getint('embedding','length'))
+            # concept_inputs = np.asarray([[concept_dict[cid]] for cid in [concept_id]+negative_concepts])
+            # import pdb; pdb.set_trace()
+            distances = [1] + [0]*len(negative_token_indices)
+            
+            data = {
+                'inp_mentions': entity_inputs,
+                'inp_candidates': concept_inputs,
+                'prediction_layer': np.asarray(distances),
+            }
+            
+            yield data, data
+
+def prepare_positives(positives,tokenizer,vocab):
+
+    formatted = []
+    for (chosen_idx,idces), span in positives:
+        vec = [vocab.get(text.lower(),1) for text in tokenizer(span)]
+        formatted.append(((chosen_idx,idces),vec))
+    return formatted

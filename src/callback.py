@@ -35,9 +35,8 @@ def evaluate(data_mentions, predictions, data_y):
 	logger.warning('High chance of same prediction scores.')
 	for start, end, untok_mention in data_mentions:
 		index_prediction = np.argmax(predictions[start:end],axis=0)
+		# print(index_prediction) # prediction same for first few epochs
 		if data_y[start:end][index_prediction] == 1:
-		##index_gold = np.argmax(data_y[start:end],axis=0)
-		##if index_prediction == index_gold:
 			correct += 1
 	total = len(data_mentions)
 	accuracy = correct/total
@@ -368,82 +367,81 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 
 
 class EarlyStoppingRankingAccuracyGenerator(Callback):
-	''' Ranking accuracy callback with early stopping.
+    ''' Ranking accuracy callback with early stopping.
 
-	'''
-	def __init__(self, conf, data_generator, concept_padded, corpus_padded, pretrained, entity_model, concept_model):
-		super().__init__()
-		raise NotImplementedError('Callback for generator is not implemented yet :P')
-		self.conf = conf
-		self.data_generator = data_generator
-		self.concept_padded = concept_padded
-		self.corpus_padded = corpus_padded
-		self.pretrained = pretrained
-		self.entity_model = entity_model
-		self.concept_model = concept_model
+    '''
+    def __init__(self, conf, concept, positives, vocab, entity_model, concept_model, original_model,val_data):
+        super().__init__()
+        self.conf = conf
+        self.concept = concept
+        self.positives = positives
+        self.vocab = vocab
+        self.entity_model = entity_model
+        self.concept_model = concept_model
+        self.original_model = original_model
+        self.val_data = val_data
 
-		self.best = 0 # best accuracy
-		self.wait = 0
-		self.stopped_epoch = 0
-		self.model_path = conf['model']['path_model_whole']
+        self.best = 0 # best accuracy
+        self.wait = 0
+        self.stopped_epoch = 0
+        self.patience = int(conf['training']['patience'])
+        self.model_path = conf['model']['path_model_whole']
 
-		self.save = int(self.conf['settings']['save_prediction'])
-		self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
-		self.history = self.conf['settings']['history'] + self.now + '.txt'
-		write_training_info(self.conf,self.history)
+        self.save = int(self.conf['settings']['save_prediction'])
+        self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.history = self.conf['settings']['history'] + self.now + '.txt'
+        write_training_info(self.conf,self.history)
 
-	def on_train_begin(self, logs={}):
-		self.losses = []
-		self.accuracy = []
+    def on_train_begin(self, logs={}):
+        self.losses = []
+        self.accuracy = []
 
-		self.wait = 0
-		with open(self.history,'a',encoding='utf-8') as fh:
-		# Pass the file handle in as a lambda function to make it callable
-			self.model.summary(print_fn=lambda x: fh.write(x + '\n'))
-		return
+        self.wait = 0
+        with open(self.history,'a',encoding='utf-8') as fh:
+        # Pass the file handle in as a lambda function to make it callable
+            self.original_model.summary(print_fn=lambda x: fh.write(x + '\n'))
+        return
 
-	def on_epoch_end(self, epoch, logs={}):
-		self.losses.append(logs.get('loss'))
+    def on_epoch_end(self, epoch, logs={}):
+        self.losses.append(logs.get('loss'))
 
-		self.convoluted_input, self.prediction_model = self.create_spedup_model(self.model,self.corpus_padded,self.concept_padded,self.pretrained)
-		test_y = self.prediction_model.predict(self.convoluted_input)
+        evaluation_parameter = predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data)
+        self.accuracy.append(evaluation_parameter)
 
-		evaluation_parameter = evaluate(self.val_data.mentions, test_y, self.val_data.y)
-		self.accuracy.append(evaluation_parameter)
-		self.convoluted_input = None
-		self.prediction_model = None
-		with open(self.history,'a',encoding='utf-8') as f:
-			f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
+        with open(self.history,'a',encoding='utf-8') as f:
+            f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
 
+        if evaluation_parameter > self.best:
+            logging.info('Intermediate model saved.')
+            self.best = evaluation_parameter
+            self.model.save(self.model_path)
+            self.wait = 0
+            # something here to print trec_eval doc
+        else:
+            self.wait += 1
+            if self.wait > int(self.conf['training']['patience']):
+                self.stopped_epoch = epoch
+                self.model.stop_training = True
+        if self.save and self.model.stop_training:
+            logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
+            model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+        logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+        return
 
-		if evaluation_parameter > self.best:
-			logging.info('Intermediate model saved.')
-			self.best = evaluation_parameter
-			self.model.save(self.model_path)
-			self.wait = 0
-			# something here to print trec_eval doc
-		else:
-			self.wait += 1
-			if self.wait > int(self.conf['training']['patience']):
-				self.stopped_epoch = epoch
-				self.model.stop_training = True
-		if self.save and self.model.stop_training:
-			logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
-			model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
-		logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
-		return
+    def on_train_end(self, logs=None):
+        if self.stopped_epoch > 0:
+            logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+        try:
+            from cnn import semantic_similarity_layer, ranking_loss
+            from keras.models import load_model
+            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer, 'ranking_loss':ranking_loss})
+        except OSError:
+            pass
+        predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
+        if self.conf.getint('model','save'):
+            save_model(self.model, self.conf['model']['path'],self.now)
+        return
 
-	def on_train_end(self, logs=None):
-		if self.stopped_epoch > 0:
-			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
-		if self.conf.getint('model','save'):
-			try:
-				self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
-			except OSError:
-				pass
-			save_model(self.model, self.conf['model']['path'],self.now)
-		return
-
-	def on_batch_end(self, batch, logs={}):
-		self.losses.append(logs.get('loss'))
-		return
+    def on_batch_end(self, batch, logs={}):
+        self.losses.append(logs.get('loss'))
+        return
