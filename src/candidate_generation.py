@@ -164,3 +164,60 @@ def all_candidates(candidate_obj,dictionary_tokenized,dictionary_vectorized,dict
     # not using this part at all, written when previously tried to implement elmo but did not finish
     if dictionary_elmo:
         candidate_obj.elmo = [dictionary_elmo[key] for key in candidate_obj.keys]
+
+
+def cos_sim_candidate(conf,n, pretrained, vocabulary, corpus, concept):
+    '''n=number of candidates'''
+    import pickle
+    import numpy as np
+
+    import vectorizer
+    import load
+    import sample
+
+
+    from baseline_embeddings import prepare_embedding_vocab, load_pretrained_word_embeddings
+    vector_model, vocabulary, inversed_vocabulary = prepare_embedding_vocab(conf['embedding']['emb_file'], binary = True)
+
+
+    # vector representations
+    import nltk
+    mention_embeddings = []
+    for mention in corpus.names:
+        tokenized = nltk.word_tokenize(mention.lower())
+        index = [vocabulary.get(token,1) for token in tokenized]
+        #emb = np.mean(np.array([pretrained[i] for i in index]), axis=0)
+        emb = np.sum(np.array([pretrained[i] for i in index]), axis=0)
+        mention_embeddings.append(emb)
+    mention_embeddings = np.array(mention_embeddings)
+
+    concept_embeddings = []
+    for mention in concept.names:
+        tokenized = nltk.word_tokenize(mention.lower())
+        index = [vocabulary.get(token,1) for token in tokenized]
+        #emb = np.mean(np.array([pretrained[i] for i in index]), axis=0)
+        emb = np.sum(np.array([pretrained[i] for i in index]), axis=0)
+        concept_embeddings.append(emb)
+    concept_embeddings = np.array(concept_embeddings)
+
+
+    concept_emb = concept_embeddings #concept.elmo
+    mention_emb = mention_embeddings #corpus_dev.elmo
+
+    from sklearn.preprocessing import normalize
+    nor_concepts = normalize(concept_emb)
+    nor_corpus_dev = normalize(mention_emb)
+
+    dot_product_matrix = np.dot(nor_corpus_dev,np.transpose(nor_concepts))
+    d = dot_product_matrix.tolist()
+    paired=[[(i,can) for i,can in enumerate(men)] for men in d]
+    nppaired = np.matrix(paired,dtype=[('index', int), ('score', float)])
+    nppaired.sort(order='score',axis=1)
+    selected = nppaired[:,-n:]
+    selected = selected.tolist()
+    selected = [[idx for idx,score in men] for men in selected]
+
+    return np.array(selected)
+
+
+

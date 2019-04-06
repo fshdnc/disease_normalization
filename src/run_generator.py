@@ -22,8 +22,12 @@ import sample
 #configurations
 dynamic_defaults = {'timestamp': time.strftime('%Y%m%d-%H%M%S')}
 config = cp.ConfigParser(defaults=dynamic_defaults,interpolation=cp.ExtendedInterpolation(),strict=False)
-directory = os.path.join(os.path.abspath(os.path.dirname(__file__)))
-config.read(os.path.join(directory, 'defaults.cfg'))
+try:
+    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)))
+    config.read(os.path.join(directory, 'defaults.cfg'))
+except NameError:
+    directory = '/home/lhchan/disease_normalization/src'
+    config.read(os.path.join(directory, 'defaults.cfg'))
 #################################################
 config['embedding']['emb_file'] = os.path.join(directory, '../../../lenz/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin')
 config['terminology']['dict_file'] = os.path.join(directory, '../../old-disease-normalization/data/ncbi-disease/CTD_diseases.tsv')
@@ -189,15 +193,11 @@ with open('gitig_positive_indices.pickle','wb') as f:
     pickle.dump([positives,positives_dev_truncated],f)
 '''
 
-positives_training, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
-def prepare_positives(positives,tokenizer,vocab):
-    formatted = []
-    for (chosen_idx,idces), span in positives:
-        vec = [vocabulary.get(text.lower(),1) for text in nltk.word_tokenize(span)]
-        formatted.append(((chosen_idx,idces),vec))
-    return formatted
+from sample import prepare_positives,examples
+positives_training,positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
 positives_dev_truncated = prepare_positives(positives_dev_truncated,nltk.word_tokenize,vocabulary)
+del positives_dev
 
 
 # sampling
@@ -395,7 +395,7 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         self.losses.append(logs.get('loss'))
-
+        self.original_model.predict_generator()
         evaluation_parameter = predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data)
         self.accuracy.append(evaluation_parameter)
 
@@ -445,6 +445,8 @@ config['note']['note'] = 'test if callback works'
 
 model, entity_model, concept_model = build_model_generator(config,vocabulary,pretrained)
 evaluation_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, val_data_truncated)
+
+
 train_examples = examples(config, concept, positives_training, vocabulary)
 dev_examples = examples(config, concept, positives_dev_truncated, vocabulary)
 
