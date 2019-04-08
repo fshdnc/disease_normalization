@@ -274,7 +274,7 @@ class EarlyStoppingRankingAccuracySpedUpSharedEncoder(Callback):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
 		if self.conf.getint('model','save'):
-			self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
+			self.model.load_weights(self.model_path)
 			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
@@ -353,11 +353,12 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 	def on_train_end(self, logs=None):
 		if self.stopped_epoch > 0:
 			logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+		try:
+			self.model.load_weights(self.model_path)
+		except OSError:
+			pass
+		predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
 		if self.conf.getint('model','save'):
-			try:
-				self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
-			except OSError:
-				pass
 			save_model(self.model, self.conf['model']['path'],self.now)
 		return
 
@@ -432,9 +433,7 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
         if self.stopped_epoch > 0:
             logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
         try:
-            from cnn import semantic_similarity_layer, ranking_loss
-            from keras.models import load_model
-            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer, 'ranking_loss':ranking_loss})
+            self.model.load_weights(self.model_path)
         except OSError:
             pass
         predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
