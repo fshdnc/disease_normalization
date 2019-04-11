@@ -99,8 +99,8 @@ def ranking_loss(y_true, y_pred):
 
 
 def build_model(conf,training_data,vocabulary,pretrained):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
     if int(conf['candidate']['use']):
         inp_scores = Input(shape=(training_data.x[2].shape[1],),dtype='float64', name='inp_scores')
     if conf.getint('embedding','elmo'):
@@ -122,6 +122,9 @@ def build_model(conf,training_data,vocabulary,pretrained):
         pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
     v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
@@ -150,7 +153,7 @@ def build_model(conf,training_data,vocabulary,pretrained):
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 
 def build_model_generator(conf,vocabulary,pretrained):
@@ -189,7 +192,7 @@ def build_model_generator(conf,vocabulary,pretrained):
 
 # Model to speed up forward pass, used in callback for evaluation
 
-def _forward_pass_speedup_conv(original_model,layerss,pretrained):
+def _forward_pass_speedup_conv(original_model,layerss):
     '''
     Input:
     original_model
@@ -203,7 +206,7 @@ def _forward_pass_speedup_conv(original_model,layerss,pretrained):
     conv = original_model.get_layer(layerss[3])
 
     new_input_terms = Input(shape=(terms.input_shape[1],),dtype='int32', name='new_input_terms')
-    new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=[pretrained])
+    new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=emb.get_weights())
     new_drop = layers.Dropout(drop.get_config()['rate'])
     encoded = new_drop(new_emb(new_input_terms))
     new_conv = Conv1D(filters=conv.filters,kernel_size=conv.kernel_size[0],activation=conv.activation,weights=conv.get_weights())(encoded)
@@ -234,9 +237,9 @@ def forward_pass_speedup(model,corpus_padded,concept_padded,pretrained):
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv_mentions','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv_mentions','global_max_pooling1d_1'])
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv_candidates','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv_candidates','global_max_pooling1d_2'])
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -252,8 +255,8 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     Check the effect of taking out the maxpooled mentions and candidates,
     i.e. how the semantic similarity layer along performs.
     '''
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     encoded_mentions = embedding_layer(inp_mentions)
@@ -263,6 +266,9 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
     v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
@@ -274,11 +280,11 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
     if int(conf['candidate']['use']):
         inp_scores = Input(shape=(training_data.x[2].shape[1],),dtype='float64', name='inp_scores')
     if conf.getint('embedding','elmo'):
@@ -300,6 +306,9 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
+
     v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
     # list of layers for concatenation
@@ -316,12 +325,12 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
     from nn.loss import AdaptedMaxMarginLoss
     model.compile(optimizer=return_optimizer(conf), loss=AdaptedMaxMarginLoss(track_obj))
 
-    return model
+    return model, entity_model, concept_model
 
 
 def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
@@ -334,6 +343,10 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
 
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
+
     if conf.getint('embedding','elmo'):
         conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_mentions_elmo)
         conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_candidates_elmo)
@@ -360,16 +373,16 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 
 def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretrained):
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'])
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'])
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -379,8 +392,8 @@ def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretr
     return convoluted_input, model_sem
 
 def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
@@ -400,6 +413,9 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
 
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
+
     v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
     prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(v_sem)  
@@ -410,7 +426,7 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 def _forward_pass_speedup_sem_xDense(original_model,convoluted_x):
     layers = ['v_sem','prediction_layer']
@@ -430,9 +446,9 @@ def forward_pass_speedup_shared_encoder_xDense(model,corpus_padded,concept_padde
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'])
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'])
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -443,8 +459,8 @@ def forward_pass_speedup_shared_encoder_xDense(model,corpus_padded,concept_padde
 
 
 def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
@@ -457,6 +473,9 @@ def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
 
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
     #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
     cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
@@ -478,11 +497,11 @@ def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrained):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
@@ -495,6 +514,9 @@ def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrain
 
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
     #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
     prediction_layer = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
@@ -507,12 +529,12 @@ def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrain
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 
 def build_model_dot(conf,training_data,vocabulary,pretrained):
-    inp_mentions = Input(shape=(training_data.x[0].shape[1],),dtype='int32', name='inp_mentions')
-    inp_candidates = Input(shape=(training_data.x[1].shape[1],),dtype='int32', name='inp_candidates')
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
     embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
     drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
@@ -525,6 +547,9 @@ def build_model_dot(conf,training_data,vocabulary,pretrained):
 
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
     #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
     cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
@@ -546,7 +571,7 @@ def build_model_dot(conf,training_data,vocabulary,pretrained):
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 
-    return model
+    return model, entity_model, concept_model
 
 def _forward_pass_speedup_dot(original_model,convoluted_x):
     layerss = ['hidden_layer','prediction_layer']
@@ -570,9 +595,9 @@ def forward_pass_speedup_shared_encoder_dot(model,corpus_padded,concept_padded,p
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'])
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'])
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -598,9 +623,9 @@ def forward_pass_speedup_shared_encoder_dot_xDense(model,corpus_padded,concept_p
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'])
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'])
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x

@@ -59,12 +59,12 @@ logging.config.dictConfig({
 })
 
 
-#[real_val_data,concept_order] = pickle.load(open('gitig_real_val_data.pickle','rb'))
-#real_val_data.y=np.array(real_val_data.y)
+[real_val_data,concept_order] = pickle.load(open('gitig_real_val_data.pickle','rb'))
+real_val_data.y=np.array(real_val_data.y)
 
 #truncated real eval data
-[real_val_data,concept_order,mention_padded] = pickle.load(open('gitig_real_val_data_truncated.pickle','rb'))
-real_val_data.y=np.array(real_val_data.y)
+#[real_val_data,concept_order,mention_padded] = pickle.load(open('gitig_real_val_data_truncated.pickle','rb'))
+#real_val_data.y=np.array(real_val_data.y)
 
 
 # word embedding
@@ -175,18 +175,18 @@ import cnn, model_tools, callback
 from keras.models import Model
 from keras.layers import Input, Embedding, Concatenate, Dense, Conv1D, GlobalMaxPooling1D, Flatten
 from keras import layers
-#model = model_tools.load_model('models/20190329-142605.json','models/synpair_continued_62.h5',{'semantic_similarity_layer': semantic_similarity_layer})
-model = model_tools.load_model('models/20190324-220005.json','models/20190324-220005.h5',{'semantic_similarity_layer': semantic_similarity_layer})
+model_shared_encoder = cnn.build_model_shared_encoder(config,real_val_data,vocabulary,pretrained)
+model_shared_encoder.load_weights('models/synpair_continued_68.h5')
 
-model.summary()
+model_shared_encoder.summary()
 
 # def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretrained):
 #     '''
 #     Model to speed up forward pass, used in callback for evaluation
 #     '''
-#     model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+#     model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'])
 #     mentions = model_mention.predict(corpus_padded) # (787, 50)
-#     model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'],pretrained)
+#     model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'])
 #     candidates = model_candidate.predict(concept_padded) # (67782,50)
 #     logger.info('Formatting pooled mentions and candidates...')
 #     # from sample import no_cangen_format_x
@@ -213,7 +213,7 @@ model.summary()
 #     model_part = Model(inputs=input_list, outputs=prediction_layer)
 #     return model_part
 
-# def _forward_pass_speedup_conv(original_model,layers,pretrained):
+# def _forward_pass_speedup_conv(original_model,layers):
 #     '''
 #     Input:
 #     original_model
@@ -226,7 +226,7 @@ model.summary()
 #     conv = original_model.get_layer(layers[2])
 
 #     new_input_terms = Input(shape=(terms.input_shape[1],),dtype='int32', name='new_input_terms')
-#     new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=[pretrained])
+#     new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=emb.get_weights())
 #     encoded = new_emb(new_input_terms)
 #     new_conv = Conv1D(filters=conv.filters,kernel_size=conv.kernel_size[0],activation=conv.activation,weights=conv.get_weights())(encoded)
 #     gl_max_p = GlobalMaxPooling1D()(new_conv)
@@ -234,7 +234,7 @@ model.summary()
 #     model_part = Model(inputs=new_input_terms, outputs=gl_max_p)
 #     return model_part
 
-def _forward_pass_speedup_conv(original_model,layerss,pretrained):
+def _forward_pass_speedup_conv(original_model,layerss):
     '''
     Input:
     original_model
@@ -244,12 +244,12 @@ def _forward_pass_speedup_conv(original_model,layerss,pretrained):
     '''
     terms = original_model.get_layer(layerss[0])
     emb = original_model.get_layer(layerss[1])
-    #drop = original_model.get_layer(layerss[2])
-    conv = original_model.get_layer(layerss[2])
+    drop = original_model.get_layer(layerss[2])
+    conv = original_model.get_layer(layerss[3])
 
     new_input_terms = Input(shape=(terms.input_shape[1],),dtype='int32', name='new_input_terms')
-    new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=[pretrained])
-    new_drop = layers.Dropout(0)
+    new_emb = Embedding(emb.input_dim, emb.output_dim, mask_zero=False, trainable=False, weights=emb.get_weights())
+    new_drop = layers.Dropout(drop.get_config()['rate'])
     encoded = new_drop(new_emb(new_input_terms))
     new_conv = Conv1D(filters=conv.filters,kernel_size=conv.kernel_size[0],activation=conv.activation,weights=conv.get_weights())(encoded)
     gl_max_p = GlobalMaxPooling1D()(new_conv)
@@ -258,7 +258,7 @@ def _forward_pass_speedup_conv(original_model,layerss,pretrained):
     return model_part
 
 def _forward_pass_speedup_sem(original_model,convoluted_x):
-    layers = ['semantic_similarity_layer_1','dense_1','dense_2']
+    layers = ['v_sem','hidden_layer','prediction_layer']
     v_sem = original_model.get_layer(layers[0])
     d1 = original_model.get_layer(layers[1])
     d2 = original_model.get_layer(layers[2])
@@ -279,9 +279,9 @@ def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretr
     '''
     Model to speed up forward pass, used in callback for evaluation
     '''
-    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_1','conv1d_1','global_max_pooling1d_1'],pretrained)
+    model_mention = _forward_pass_speedup_conv(model,['inp_mentions','embedding_layer','drop','conv1d','global_max_pooling1d_1'])
     mentions = model_mention.predict(corpus_padded) # (787, 50)
-    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_1','conv1d_1','global_max_pooling1d_2'],pretrained)
+    model_candidate = _forward_pass_speedup_conv(model,['inp_candidates','embedding_layer','drop','conv1d','global_max_pooling1d_2'])
     candidates = model_candidate.predict(concept_padded) # (67782,50)
     logger.info('Formatting pooled mentions and candidates...')
     # from sample import no_cangen_format_x
@@ -290,7 +290,7 @@ def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretr
     model_sem = _forward_pass_speedup_sem(model,convoluted_input)
     return convoluted_input, model_sem
 
-conv_x, sped_up_model = forward_pass_speedup_shared_encoder(model,mention_padded,concept.padded,pretrained)                                                                  
+conv_x, sped_up_model = forward_pass_speedup_shared_encoder(model_shared_encoder,corpus_dev.padded,concept.padded,pretrained)                                                                  
 tr_predictions = sped_up_model.predict(conv_x)
 acc = callback.evaluate(real_val_data.mentions,tr_predictions,real_val_data.y)
 logger.info('Accuracy for the pretrained model on validation set:{0}'.format(acc))
