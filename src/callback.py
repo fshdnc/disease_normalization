@@ -48,6 +48,19 @@ def write_training_info(conf,path):
 	with open(path,'w',encoding='utf-8') as configfile:    # save
 		conf.write(configfile)
 
+class Timed(Callback):
+	''' 
+	Calculates time taken.
+	'''
+	def __init__(self):
+		super().__init__()
+		self.before = None
+		self.after = None
+	def on_epoch_begin(self,epoch,logs={}):
+		self.before = datetime.now()
+	def on_epoch_end(self, epoch,logs={}):
+		self.after = datetime.now()
+		logger.info('Time taken for the epoch:{0}'.format(self.after-self.before))
 
 class EarlyStoppingRankingAccuracy(Callback):
 	''' Ranking accuracy callback with early stopping.

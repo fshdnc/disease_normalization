@@ -1,5 +1,6 @@
 '''
 Shared encoder, generator
+give 50, 200, 400 for the embedding used as the first argument
 '''
 import os
 import time
@@ -7,7 +8,7 @@ import logging
 import logging.config
 
 import configparser as cp
-import args
+import sys
 
 import numpy as np
 from keras.preprocessing.sequence import pad_sequences
@@ -29,7 +30,6 @@ except NameError:
     directory = '/home/lhchan/disease_normalization/src'
     config.read(os.path.join(directory, 'defaults.cfg'))
 #################################################
-config['embedding']['emb_file'] = os.path.join(directory, '../../../lenz/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin')
 config['terminology']['dict_file'] = os.path.join(directory, '../../old-disease-normalization/data/ncbi-disease/CTD_diseases.tsv')
 config['corpus']['training_file'] = os.path.join(directory,'../../old-disease-normalization/data/ncbi-disease/NCBItrainset_corpus.txt')
 config['corpus']['development_file'] = os.path.join(directory,'../../old-disease-normalization/data/ncbi-disease/NCBIdevelopset_corpus.txt')
@@ -49,12 +49,12 @@ if config.getint('settings','gpu'):
     config.gpu_options.allow_growth=True
     sess = tf.Session(config=config)
 
-#argparser
-args = args.get_args()
-'''
->>> args.train
-False
-'''
+if sys.argv[0]=='50':
+    config['embedding']['emb_file'] = os.path.join(directory, '../../../lenz/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin')
+elif sys.argv[0]=='200':
+    config['embedding']['emb_file'] = os.path.join(directory, '../../disease_normalization/data/pubmed2018_w2v_200D/pubmed2018_w2v_200D.bin')
+elif sys.argv[0]=='400':
+    config['embedding']['emb_file'] = os.path.join(directory, '../../disease_normalization/data/pubmed2018_w2v_400D/pubmed2018_w2v_400D.bin')
 
 #logging
 logger = logging.getLogger(__name__)
@@ -147,11 +147,10 @@ def concept_obj(conf,dictionary,order=None):
     return concept
 
 
-[val_data_truncated,concept_order, corpus_dev_truncated] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data_truncated_d50_p5.pickle'),'rb'))
+# validation set
+[real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
 val_data_truncated.y=np.array(val_data_truncated.y)
-corpus_dev_truncated.padded = pad_sequences(corpus_dev_truncated.vectorize, padding='post', maxlen=int(config['embedding']['length']))
-# corpus_dev_truncated.tokenize = None
-# corpus_dev_truncated.vectorize = None
+real_val_data.x = None
 
 concept = concept_obj(config,dictionary,order=concept_order)
 
@@ -160,7 +159,10 @@ concept = concept_obj(config,dictionary,order=concept_order)
 corpus_train = sample.NewDataSet('training corpus')
 corpus_train.objects = load.load(os.path.normpath(config['corpus']['training_file']),'NCBI')
 
-for corpus in [corpus_train]:
+corpus_dev = sample.NewDataSet('dev corpus')
+corpus_dev.objects = load.load(config['corpus']['development_file'],'NCBI')
+
+for corpus in [corpus_train, corpus_dev]:
     corpus.ids = [] # list of all ids (gold standard for each mention)
     corpus.names = [] # list of all names
     corpus.all = [] # list of tuples (mention_text,gold,context,(start,end,docid))
@@ -176,27 +178,34 @@ for corpus in [corpus_train]:
                 corpus.all.append((mention.text,nor_ids,section.text,(mention.start,mention.end,abstract.docid)))
 
 
+corpus_dev.tokenize = [nltk.word_tokenize(name) for name in corpus_dev.names]
+corpus_dev.vectorize = np.array([[vocabulary.get(text.lower(),1) for text in mention] for mention in corpus_dev.tokenize])
+corpus_dev.padded = pad_sequences(corpus_dev.vectorize, padding='post', maxlen=int(config['embedding']['length']))
+corpus_dev.tokenize = None
+corpus_dev.vectorize = None
+
+
 # sample concepts for each mention
 import sp_training, sample
 logger.info('Sampling training data...')
 # FIXME: pick_positive_name ignores those whose gold standard length is not one (multiple or nil)
 
-'''
-positives = [sp_training.pick_positive_name(config,corpus_train,concept,i) for i in range(len(corpus_train.names))]
-positives = [*zip(positives,corpus_train.names)]
 
-positives_dev_truncated = [sp_training.pick_positive_name(config,corpus_dev_truncated,concept,i) for i in range(len(corpus_dev_truncated.names))]
-positives_dev_truncated = [*zip(positives_dev_truncated,corpus_dev_truncated.names)]
+# positives = [sp_training.pick_positive_name(config,corpus_train,concept,i) for i in range(len(corpus_train.names))]
+# positives = [*zip(positives,corpus_train.names)]
 
-with open('gitig_positive_indices.pickle','wb') as f:
-    pickle.dump([positives,positives_dev_truncated],f)
-'''
+# positives_dev_truncated = [sp_training.pick_positive_name(config,corpus_dev_truncated,concept,i) for i in range(len(corpus_dev_truncated.names))]
+# positives_dev_truncated = [*zip(positives_dev_truncated,corpus_dev_truncated.names)]
+
+# with open('gitig_positive_indices.pickle','wb') as f:
+#     pickle.dump([positives,positives_dev_truncated],f)
+
 
 from sample import prepare_positives,examples
 positives_training,positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
-positives_dev_truncated = prepare_positives(positives_dev_truncated,nltk.word_tokenize,vocabulary)
-del positives_dev
+positives_dev = prepare_positives(positives_dev,nltk.word_tokenize,vocabulary)
+del positives_dev_truncated
 
 
 # sampling
@@ -467,17 +476,20 @@ config['note']['note'] = 'test if eval works'
 
 # test if eval works
 model, entity_model, concept_model = cnn.build_model_shared_encoder(config,'dummy',vocabulary,pretrained)
-model.load_weights('models/pretrained_d50_p5.h5')
+# model.load_weights('models/pretrained_d50_p5.h5')
 
-evaluation_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, val_data_truncated)
+evaluation_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev, vocabulary, entity_model, concept_model, model, real_val_data)
 
 
 
 train_examples = examples(config, concept, positives_training, vocabulary)
-dev_examples = examples(config, concept, positives_dev_truncated, vocabulary)
+dev_examples = examples(config, concept, positives_dev, vocabulary)
 
 
 for i in range(config.getint('training','epoch')):
-    model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev_truncated.names), epochs=1, callbacks=[evaluation_function])
-
+    logger.info('Epoch {0}'.format(i+1))
+    before = datetime.now()
+    model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev.names), epochs=1, callbacks=[evaluation_function])
+    after = datetime.now()
+    logger.info('Time taken for the epoch:{0}'.format(after-before))
 import pdb; pdb.set_trace()

@@ -2,7 +2,7 @@
 - use all concepts and synonyms
 -exact match pairs and synonym pairs'''
 
-pretrain = False
+pretrain = True
 
 import logging
 import logging.config
@@ -37,12 +37,13 @@ config['embedding']['emb_file'] = '/home/lenz/disease-normalization/data/embeddi
 #'/home/lenz/disease-normalization/data/embeddings/wvec_50_haodi-li-et-al.bin'
 config['cnn']['filters'] = '20'
 config['cnn']['optimizer'] = 'adam'
-config['cnn']['lr'] = '0.00001'
+config['cnn']['lr'] = '0.00005'
 config['cnn']['loss'] = 'binary_crossentropy'
 config['cnn']['dropout'] = '0.5'
 config['embedding']['length'] = '5'
 config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'continue training with synonyms d=50, p=5 using pretrained models/pretrained_d50_p5.h5'
+config['note']['note'] = 'pretraining with synonyms d=50, p=5'
+config['model']['save'] = '1'
 #################################################
 
 #argparser
@@ -220,7 +221,7 @@ if pretrain:
 
 
     del vocabulary
-    hist_shared = model_shared_encoder.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[evaluation_function_truncated_dev])
+    hist_shared = model_shared_encoder.fit(tr_data.x, tr_data.y, epochs=10, batch_size=100,callbacks=[evaluation_function_truncated_dev])
     import pdb; pdb.set_trace()
 
 
@@ -228,10 +229,7 @@ if pretrain:
 from sample import prepare_positives
 positives_training, positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 # positives = pickle.load(open('gitig_positive_indices_all.pickle','rb'))
-try:
-    positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
-except TypeError:
-    pass
+positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
 positives_dev_truncated = prepare_positives(positives_dev_truncated,nltk.word_tokenize,vocabulary)
 
 
@@ -373,8 +371,8 @@ def build_model_generator(conf,vocabulary,pretrained):
 def predict(config, concept, positives, vocab, entity_model, concept_model, original_model,val_data,result=None):
     entity_examples = examples(config, concept, positives, vocab, neg_count=0)
 
-    c_token_indices = [[vocab.get(t.lower(), 1) for t in nltk.word_tokenize(neg)] for neg in concept.names]
-    concept_examples = pad_sequences(c_token_indices, maxlen=config.getint('embedding','length'))
+    #c_token_indices = [[vocab.get(t.lower(), 1) for t in nltk.word_tokenize(neg)] for neg in concept.names]
+    concept_examples = pad_sequences(concept.vectorize, maxlen=config.getint('embedding','length'))
    
     entity_encodings = entity_model.predict_generator(entity_examples, steps=len(positives))    
     concept_encodings = concept_model.predict(concept_examples)
@@ -383,10 +381,10 @@ def predict(config, concept, positives, vocab, entity_model, concept_model, orig
     from sample import sped_up_format_x
     convoluted_input = sped_up_format_x(entity_encodings,concept_encodings)
     
-    layers = ['v_sem','hidden_layer','prediction_layer']
-    v_sem = original_model.get_layer(layers[0])
-    d1 = original_model.get_layer(layers[1])
-    d2 = original_model.get_layer(layers[2])
+    layerss = ['v_sem','hidden_layer','prediction_layer']
+    v_sem = original_model.get_layer(layerss[0])
+    d1 = original_model.get_layer(layerss[1])
+    d2 = original_model.get_layer(layerss[2])
 
     entity_encodings = Input(shape=(convoluted_input[0].shape[1],),dtype='float32', name='entity_encodings')
     concept_encodings = Input(shape=(convoluted_input[1].shape[1],),dtype='float32', name='concept_encodings')
@@ -499,10 +497,11 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 dummy = None
 
 model, entity_model, concept_model = cnn.build_model_shared_encoder(config,dummy,vocabulary,pretrained)
-model.load_weights('models/pretrained_d50_p5.h5')
+model.load_weights('models/20190407-105603.h5')
+# model_shared_encoder = model_tools.load_model('models/20190407-105603.json','models/20190407-105603.h5',{'semantic_similarity_layer': semantic_similarity_layer})
+
 evaluation_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
 
-# model_shared_encoder = model_tools.load_model('models/20190329-142605.json','models/pretrained_synpair.h5',{'semantic_similarity_layer': semantic_similarity_layer})
 # from keras import optimizers
 # adam = optimizers.Adam(lr=0.00001, epsilon=None, decay=0.0)
 # model_shared_encoder.compile(optimizer=adam,loss='binary_crossentropy')
@@ -514,3 +513,4 @@ for ep in range(100):
         model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev.names), epochs=1, callbacks=[evaluation_function])
 
 import pdb; pdb.set_trace()
+
