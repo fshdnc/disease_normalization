@@ -370,7 +370,8 @@ class EarlyStoppingRankingAccuracySpedUpGiveModel(Callback):
 			self.model.load_weights(self.model_path)
 		except OSError:
 			pass
-		predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
+		# function in run_generator
+		# predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
 		if self.conf.getint('model','save'):
 			save_model(self.model, self.conf['model']['path'],self.now)
 		return
@@ -449,7 +450,8 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
             self.model.load_weights(self.model_path)
         except OSError:
             pass
-        predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
+        # function in run_generator
+        # predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
         if self.conf.getint('model','save'):
             save_model(self.model, self.conf['model']['path'],self.now)
         return

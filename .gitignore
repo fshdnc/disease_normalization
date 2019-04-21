@@ -3,11 +3,13 @@ gitig/*
 data/*
 *.json
 *.h5
+*.pickle
 
 # testing files and drafts
 gitig_*
 src/dis*
 vis
+src/fe_*
 
 # virtual environments
 venv*

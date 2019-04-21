@@ -69,17 +69,23 @@ def _load_NCBI_discorp(filename):
 #from gitig_MEDIC.py
 import parse_MEDIC_dictionary
 
+
 def _load_MEDIC(filename):
 
         '''MEDIC terms from generator to tuples (saves memory)
            saved in a dictionary (DiseaseID as key)'''
 
         MEDIC_dict = {}
-
-        for DiseaseID, entry in parse_MEDIC_dictionary.parse_MEDIC_dictionary(filename):
-                #print(entry,'\n')
-                assert DiseaseID not in MEDIC_dict.keys()
-                MEDIC_dict[DiseaseID] = entry
+        try:
+            for DiseaseID, entry in parse_MEDIC_dictionary.parse_MEDIC_dictionary(filename):
+                    #print(entry,'\n')
+                    assert DiseaseID not in MEDIC_dict.keys()
+                    MEDIC_dict[DiseaseID] = entry
+        except ValueError:
+            for DiseaseID, entry in parse_MEDIC_dictionary.parse_MEDIC_dictionary_newer(filename):
+                    #print(entry,'\n')
+                    assert DiseaseID not in MEDIC_dict.keys()
+                    MEDIC_dict[DiseaseID] = entry
         return MEDIC_dict
 
 
