@@ -2,10 +2,14 @@
 Four architectures,separate/shared encoder x dense/no dense layer
 first argv: 'separate', 'shared'
 second argv: 'full', 'ablation'
+third argv: used for continue training after interuption # not implemented
 '''
 import sys
 assert sys.argv[1] == 'separate' or sys.argv[1] == 'shared'
 assert sys.argv[2] == 'full' or sys.argv[2] == 'ablation'
+
+import random
+random.seed(1)
 
 import os
 import time
@@ -41,12 +45,12 @@ config['corpus']['development_file'] = os.path.join(directory,'../../old-disease
 config['settings']['history'] = os.path.join(directory, '../gitig/log/')
 config['cnn']['filters'] = '50'
 config['cnn']['optimizer'] = 'adam'
-config['cnn']['lr'] = '0.00001'
+config['cnn']['lr'] = '0.00005'
 config['cnn']['loss'] = 'binary_crossentropy'
 config['cnn']['dropout'] = '0.5'
 config['embedding']['length'] = '10'
 config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'final experiment, no pretraining, architectue:'+ sys.argv[1] + ' encoder, ' + sys.argv[2] + ', continue training lr=0.0001'
+config['note']['note'] = 'final experiment, no pretraining, architectue:'+ sys.argv[1] + ' encoder, ' + sys.argv[2]
 #################################################
 if config.getint('settings','gpu'):
     import tensorflow as tf
@@ -136,19 +140,24 @@ def concept_obj(conf,dictionary,order=None):
     return concept
 
 
-# validation set
-[real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
-real_val_data.y=np.array(real_val_data.y)
-real_val_data.x = None
+# # validation set
+# [real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
+# real_val_data.y=np.array(real_val_data.y)
+# real_val_data.x = None
 
-concept = concept_obj(config,dictionary,order=concept_order)
+logger.info('Using truncated development corpus for evaluation.')
+#corpus_dev = sample.NewDataSet('dev corpus')
+[real_val_data,concept_order,corpus_dev] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data_truncated_d50_p5.pickle'),'rb'))
+real_val_data.y=np.array(real_val_data.y)
+
+concept = concept_obj(config,dictionary,order=concept_order)    
 
 
 from sample import prepare_positives,examples
 positives_training, positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
 positives_dev = prepare_positives(positives_dev,nltk.word_tokenize,vocabulary)
-del positives_dev_truncated
+positives_dev_truncated = prepare_positives(positives_dev_truncated,nltk.word_tokenize,vocabulary)
 
 
 # corpus
@@ -176,28 +185,28 @@ for corpus in [corpus_train]:
     corpus.vectorize = None
 
 
-corpus_dev = sample.NewDataSet('dev corpus')
-corpus_dev.objects = load.load(config['corpus']['development_file'],'NCBI')
+# corpus_dev = sample.NewDataSet('dev corpus')
+# corpus_dev.objects = load.load(config['corpus']['development_file'],'NCBI')
 
-for corpus in [corpus_dev]:
-    corpus.ids = [] # list of all ids (gold standard for each mention)
-    corpus.names = [] # list of all names
-    corpus.all = [] # list of tuples (mention_text,gold,context,(start,end,docid))
+# for corpus in [corpus_dev]:
+#     corpus.ids = [] # list of all ids (gold standard for each mention)
+#     corpus.names = [] # list of all names
+#     corpus.all = [] # list of tuples (mention_text,gold,context,(start,end,docid))
 
-    #sth wrong here that sometimes throw an error
-    #import pdb;pdb.set_trace()
-    for abstract in corpus.objects:
-        for section in abstract.sections: # title and abstract
-            for mention in section.mentions:
-                nor_ids = [sample._nor_id(one_id) for one_id in mention.id]
-                corpus.ids.append(nor_ids) # append list of ids, usually len(list)=1
-                corpus.names.append(mention.text)
-                corpus.all.append((mention.text,nor_ids,section.text,(mention.start,mention.end,abstract.docid)))
-    #corpus.tokenize = [nltk.word_tokenize(name) for name in corpus.names]
-    #corpus.vectorize = np.array([[vocabulary.get(text.lower(),1) for text in mention] for mention in corpus.tokenize])
-    #corpus.padded = pad_sequences(corpus.vectorize, padding='post', maxlen=int(config['embedding']['length']))
-    #corpus.tokenize = None
-    #corpus.vectorize = None
+#     #sth wrong here that sometimes throw an error
+#     #import pdb;pdb.set_trace()
+#     for abstract in corpus.objects:
+#         for section in abstract.sections: # title and abstract
+#             for mention in section.mentions:
+#                 nor_ids = [sample._nor_id(one_id) for one_id in mention.id]
+#                 corpus.ids.append(nor_ids) # append list of ids, usually len(list)=1
+#                 corpus.names.append(mention.text)
+#                 corpus.all.append((mention.text,nor_ids,section.text,(mention.start,mention.end,abstract.docid)))
+#     #corpus.tokenize = [nltk.word_tokenize(name) for name in corpus.names]
+#     #corpus.vectorize = np.array([[vocabulary.get(text.lower(),1) for text in mention] for mention in corpus.tokenize])
+#     #corpus.padded = pad_sequences(corpus.vectorize, padding='post', maxlen=int(config['embedding']['length']))
+#     #corpus.tokenize = None
+#     #corpus.vectorize = None
 
 
 # sampling
@@ -297,8 +306,9 @@ def predict(config, concept, positives, vocab, entity_model, concept_model, orig
     
     layerss = ['v_sem','hidden_layer','prediction_layer']
     v_sem = original_model.get_layer(layerss[0])
-    d1 = original_model.get_layer(layerss[1])
     d2 = original_model.get_layer(layerss[2])
+    if sys.argv[2] == 'full':
+        d1 = original_model.get_layer(layerss[1])
 
     entity_encodings = Input(shape=(convoluted_input[0].shape[1],),dtype='float32', name='entity_encodings')
     concept_encodings = Input(shape=(convoluted_input[1].shape[1],),dtype='float32', name='concept_encodings')
@@ -384,9 +394,9 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
             if self.wait > int(self.conf['training']['patience']):
                 self.stopped_epoch = epoch
                 self.model.stop_training = True
-        if self.save and self.model.stop_training:
-            logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
-            model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+        # if self.save and self.model.stop_training:
+        #     logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
+        #     model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
         logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
         return
 
@@ -394,9 +404,9 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
         if self.stopped_epoch > 0:
             logger.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
         try:
-            from cnn import semantic_similarity_layer, ranking_loss
+            from cnn import semantic_similarity_layer #, ranking_loss
             from keras.models import load_model
-            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer, 'ranking_loss':ranking_loss})
+            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})#, 'ranking_loss':ranking_loss})
             logger.info('Best model reloaded.')
         except OSError:
             pass
@@ -413,7 +423,7 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 from model_tools import load_model, save_model
 import cnn, model_tools
 
-
+tr_data = 'dummy'
 if sys.argv[1] == 'separate':
     if sys.argv[2] == 'full':
         model, entity_model, concept_model = cnn.build_model(config,tr_data,vocabulary,pretrained)
@@ -426,12 +436,12 @@ elif sys.argv[1] == 'shared':
         model, entity_model, concept_model = cnn.build_model_shared_encoder_xDense(config,tr_data,vocabulary,pretrained)
 
 
-dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev, vocabulary, entity_model, concept_model, model, real_val_data)
+dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
 
 train_examples = examples(config, concept, positives_training, vocabulary)
 dev_examples = examples(config, concept, positives_dev, vocabulary)
 
 hist = model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev.names), epochs=config.getint('training','epoch'), callbacks=[dev_eval_function])    
 
-import pdb; pdb.set_trace()
+#import pdb; pdb.set_trace()
 

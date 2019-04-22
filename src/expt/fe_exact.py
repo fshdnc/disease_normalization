@@ -8,6 +8,9 @@ import sys
 assert sys.argv[1] == 'separate' or sys.argv[1] == 'shared'
 assert sys.argv[2] == 'full' or sys.argv[2] == 'ablation'
 
+import random
+random.seed(1)
+
 import os
 import time
 import logging
@@ -47,7 +50,7 @@ config['cnn']['loss'] = 'binary_crossentropy'
 config['cnn']['dropout'] = '0.5'
 config['embedding']['length'] = '10'
 config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'continue from: ' + sys.argv[3] + 'final experiment, exact match, architectue:'+ sys.argv[1] + ' encoder, ' + sys.argv[2] + ', continue training lr=0.0001'
+config['note']['note'] = 'final experiment, exact match, architectue:'+ sys.argv[1] + ' encoder, ' + sys.argv[2] + ', continue training lr=0.00005, truncated dev set'
 #################################################
 if config.getint('settings','gpu'):
     import tensorflow as tf
@@ -137,18 +140,24 @@ def concept_obj(conf,dictionary,order=None):
     return concept
 
 
-# validation set
-[real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
+# # validation set
+# [real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
+# real_val_data.y=np.array(real_val_data.y)
+# real_val_data.x = None
+
+logger.info('Using truncated development corpus for evaluation.')
+#corpus_dev = sample.NewDataSet('dev corpus')
+[real_val_data,concept_order,corpus_dev] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data_truncated_d50_p5.pickle'),'rb'))
 real_val_data.y=np.array(real_val_data.y)
-real_val_data.x = None
 
 concept = concept_obj(config,dictionary,order=concept_order)
 
 
 from sample import prepare_positives,examples
 positives_training, positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
-positives_dev = prepare_positives(positives_dev,nltk.word_tokenize,vocabulary)
-del positives_dev_truncated, positives_training
+# positives_dev = prepare_positives(positives_dev,nltk.word_tokenize,vocabulary)
+positives_dev_truncated = prepare_positives(positives_dev_truncated,nltk.word_tokenize,vocabulary)
+del positives_dev, positives_training
 
 
 # corpus
@@ -176,82 +185,80 @@ for corpus in [corpus_train]:
     corpus.vectorize = None
 
 
-corpus_dev = sample.NewDataSet('dev corpus')
-corpus_dev.objects = load.load(config['corpus']['development_file'],'NCBI')
+# corpus_dev = sample.NewDataSet('dev corpus')
+# corpus_dev.objects = load.load(config['corpus']['development_file'],'NCBI')
 
-for corpus in [corpus_dev]:
-    corpus.ids = [] # list of all ids (gold standard for each mention)
-    corpus.names = [] # list of all names
-    corpus.all = [] # list of tuples (mention_text,gold,context,(start,end,docid))
+# for corpus in [corpus_dev]:
+#     corpus.ids = [] # list of all ids (gold standard for each mention)
+#     corpus.names = [] # list of all names
+#     corpus.all = [] # list of tuples (mention_text,gold,context,(start,end,docid))
 
-    #sth wrong here that sometimes throw an error
-    #import pdb;pdb.set_trace()
-    for abstract in corpus.objects:
-        for section in abstract.sections: # title and abstract
-            for mention in section.mentions:
-                nor_ids = [sample._nor_id(one_id) for one_id in mention.id]
-                corpus.ids.append(nor_ids) # append list of ids, usually len(list)=1
-                corpus.names.append(mention.text)
-                corpus.all.append((mention.text,nor_ids,section.text,(mention.start,mention.end,abstract.docid)))
-    #corpus.tokenize = [nltk.word_tokenize(name) for name in corpus.names]
-    #corpus.vectorize = np.array([[vocabulary.get(text.lower(),1) for text in mention] for mention in corpus.tokenize])
-    #corpus.padded = pad_sequences(corpus.vectorize, padding='post', maxlen=int(config['embedding']['length']))
-    #corpus.tokenize = None
-    #corpus.vectorize = None
-
-
-# # create synthetic training data
-# collection_names = concept.names + corpus_train.names
-# # collection_tokenize = concept.tokenize + corpus_train.tokenize
-# collection = np.concatenate((concept.padded, corpus_train.padded),axis=0)
-# # split the training and validation set
-# cutoff = len(collection) - len(collection)//10
+#     #sth wrong here that sometimes throw an error
+#     #import pdb;pdb.set_trace()
+#     for abstract in corpus.objects:
+#         for section in abstract.sections: # title and abstract
+#             for mention in section.mentions:
+#                 nor_ids = [sample._nor_id(one_id) for one_id in mention.id]
+#                 corpus.ids.append(nor_ids) # append list of ids, usually len(list)=1
+#                 corpus.names.append(mention.text)
+#                 corpus.all.append((mention.text,nor_ids,section.text,(mention.start,mention.end,abstract.docid)))
+#     #corpus.tokenize = [nltk.word_tokenize(name) for name in corpus.names]
+#     #corpus.vectorize = np.array([[vocabulary.get(text.lower(),1) for text in mention] for mention in corpus.tokenize])
+#     #corpus.padded = pad_sequences(corpus.vectorize, padding='post', maxlen=int(config['embedding']['length']))
+#     #corpus.tokenize = None
+#     #corpus.vectorize = None
 
 
-# # questions, answers, labels
-# questions = [term for term in collection for i in range(2)]
-# answers = []
-# labels = []
-# mentions = []
-
-import random
-
-# for i, c in enumerate(collection):
-#     order = random.randint(0,1)
-#     j = i-1000
-#     try:
-#         # test that the vectorized 'random' sample is not the same as the question
-#         identical = c==collection[j]
-#         assert not identical.all()
-#     except AssertionError:
-#         identical = c==collection[j]
-#         while identical.all():
-#             j = j -10
-#             identical = c==collection[j]
-#     if order:
-#         answers.append(c)
-#         answers.append(collection[j])
-#         labels.extend([1,0])
-#     else:
-#         answers.append(collection[j])
-#         answers.append(c)
-#         labels.extend([0,1])
+# create synthetic training data
+collection_names = concept.names + corpus_train.names
+# collection_tokenize = concept.tokenize + corpus_train.tokenize
+collection = np.concatenate((concept.padded, corpus_train.padded),axis=0)
+# split the training and validation set
+cutoff = len(collection) - len(collection)//10
 
 
-# tr_data = sample.Data()
-# tr_data.x = [np.array(questions[:cutoff*2]),np.array(answers[:cutoff*2])]
-# tr_data.y = np.array(labels[:cutoff*2])
-# tr_data.mentions=[]
-# for i, c in enumerate(collection[:cutoff]):
-#     tr_data.mentions.append((i*2,i*2+2,collection_names[i]))
+# questions, answers, labels
+questions = [term for term in collection for i in range(2)]
+answers = []
+labels = []
+mentions = []
+
+for i, c in enumerate(collection):
+    order = random.randint(0,1)
+    j = i-1000
+    try:
+        # test that the vectorized 'random' sample is not the same as the question
+        identical = c==collection[j]
+        assert not identical.all()
+    except AssertionError:
+        identical = c==collection[j]
+        while identical.all():
+            j = j -10
+            identical = c==collection[j]
+    if order:
+        answers.append(c)
+        answers.append(collection[j])
+        labels.extend([1,0])
+    else:
+        answers.append(collection[j])
+        answers.append(c)
+        labels.extend([0,1])
 
 
-# syn_val_data = sample.Data()
-# syn_val_data.x = [np.array(questions[cutoff*2:]),np.array(answers[cutoff*2:])]
-# syn_val_data.y = np.array(labels[cutoff*2:])
-# syn_val_data.mentions=[]
-# for i, c in enumerate(collection[cutoff:]):
-#     syn_val_data.mentions.append((i*2,i*2+2,collection_names[i]))
+tr_data = sample.Data()
+tr_data.x = [np.array(questions[:cutoff*2]),np.array(answers[:cutoff*2])]
+tr_data.y = np.array(labels[:cutoff*2])
+tr_data.mentions=[]
+for i, c in enumerate(collection[:cutoff]):
+    tr_data.mentions.append((i*2,i*2+2,collection_names[i]))
+
+
+syn_val_data = sample.Data()
+syn_val_data.x = [np.array(questions[cutoff*2:]),np.array(answers[cutoff*2:])]
+syn_val_data.y = np.array(labels[cutoff*2:])
+syn_val_data.mentions=[]
+for i, c in enumerate(collection[cutoff:]):
+    syn_val_data.mentions.append((i*2,i*2+2,collection_names[i]))
 
 
 # sampling
@@ -449,9 +456,9 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
         if self.stopped_epoch > 0:
             logger.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
         try:
-            from cnn import semantic_similarity_layer, ranking_loss
+            from cnn import semantic_similarity_layer
             from keras.models import load_model
-            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer, 'ranking_loss':ranking_loss})
+            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer})
             logger.info('Best model reloaded.')
         except OSError:
             pass
@@ -469,10 +476,10 @@ from model_tools import load_model, save_model
 import cnn, model_tools
 
 
-# from callback import EarlyStoppingRankingAccuracy
-# syn_eval_function = EarlyStoppingRankingAccuracy(config,syn_val_data)
+from callback import EarlyStoppingRankingAccuracy
+syn_eval_function = EarlyStoppingRankingAccuracy(config,syn_val_data)
 
-tr_data = 'dummy'
+#tr_data = 'dummy'
 if sys.argv[1] == 'separate':
     if sys.argv[2] == 'full':
         model, entity_model, concept_model = cnn.build_model(config,tr_data,vocabulary,pretrained)
@@ -484,9 +491,9 @@ elif sys.argv[1] == 'shared':
     elif sys.argv[2] == 'ablation':
         model, entity_model, concept_model = cnn.build_model_shared_encoder_xDense(config,tr_data,vocabulary,pretrained)
 
-dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev, vocabulary, entity_model, concept_model, model, real_val_data)
-# hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[syn_eval_function,dev_eval_function])
-#hist = model.fit(tr_data.x, tr_data.y, epochs=1, batch_size=100,callbacks=[syn_eval_function,dev_eval_function])
+dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
+hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[syn_eval_function,dev_eval_function])
+# hist = model.fit(tr_data.x, tr_data.y, epochs=1, batch_size=100,callbacks=[syn_eval_function,dev_eval_function])
 
 
 # # save the weights for semantic similarity matrix
@@ -496,30 +503,26 @@ dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, posit
 #     pickle.dump(weights,f)
 
 # del weights, tr_data, syn_val_data, collection, collection_names, cutoff, questions, answers, labels
+del tr_data, syn_val_data, collection, collection_names, cutoff, questions, answers, labels
 
 
-# logger.info('Pretraining with exact match finished. Continue training with real data.')
+logger.info('Pretraining with exact match finished. Continue training with real data.')
 
-logger.info('Continue from interrupted training, reloading model: {0}'.format(sys.argv[3]))
-model.load_weights(sys.argv[3])
+# logger.info('Continue from interrupted training, reloading model: {0}'.format(sys.argv[3]))
+# model.load_weights(sys.argv[3])
 
-# change learning rate: https://groups.google.com/forum/#!topic/keras-users/ZpCHMsGSJEQ
-# from keras import backend as K
-## Change the learning rate of the custom optimizer
-## set the learning rate to 0.3
-# sgd.lr = K.varaible(0.00001)
-## verify if the lr has changed
-# m = model.get_config()
-# m['optimizer']['lr']
+
+# change learning rate
 from keras import optimizers
-adam = optimizers.Adam(lr=0.0001, epsilon=None, decay=0.0)
+adam = optimizers.Adam(lr=0.00005, epsilon=None, decay=0.0)
 model.compile(optimizer=adam,loss=config['cnn']['loss'])
 
 
 positives_training, positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
 positives_dev = prepare_positives(positives_dev,nltk.word_tokenize,vocabulary)
-del positives_dev_truncated
+positives_dev_truncated = prepare_positives(positives_dev_truncated,nltk.word_tokenize,vocabulary)
+
 
 train_examples = examples(config, concept, positives_training, vocabulary)
 dev_examples = examples(config, concept, positives_dev, vocabulary)
