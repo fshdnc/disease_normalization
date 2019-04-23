@@ -434,6 +434,8 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 
         with open(self.history,'a',encoding='utf-8') as f:
             f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
+            if logs.get('val_loss'):
+                f.write('Epoch: {0}, Validation loss: {1}\n'.format(epoch,logs.get('val_loss')))
 
         if evaluation_parameter > self.best:
             logging.info('Intermediate model saved.')
