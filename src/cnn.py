@@ -423,7 +423,7 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained,d
         v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
         prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(v_sem) 
     else:
-        prediction_layer = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
+        prediction_layer = semantic_similarity_layer(name='prediction_layer')([pooled_mentions,pooled_candidates])
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -525,13 +525,12 @@ def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrain
 
     if decision_layer:
         cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
-        prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(cos_sim)  
+        prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(cos_sim)
     else:
-        prediction_layer = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
-
+        prediction_layer = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='prediction_layer')
+        
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
-
     model = Model(inputs=input_list, outputs=prediction_layer)
     model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
 

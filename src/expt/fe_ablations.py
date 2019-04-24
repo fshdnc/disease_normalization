@@ -335,12 +335,13 @@ def _predict_shared_encoder_dot(original_model,entity_encodings,concept_encoding
 
 def _predict_shared_encoder_xDense(original_model,entity_encodings,concept_encodings):
     layerss = ['v_sem','hidden_layer','prediction_layer']
-    v_sem = original_model.get_layer(layerss[0])
     try:
+        v_sem = original_model.get_layer(layerss[0])
         d2 = original_model.get_layer(layerss[2])
         sem = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
         prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(sem)
     except ValueError: # no decision layer
+        v_sem = original_model.get_layer(layerss[2])
         prediction_layer = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
     model = Model(inputs=[entity_encodings,concept_encodings], outputs=prediction_layer)
     return model
@@ -351,7 +352,7 @@ def _predict_shared_encoder_dot_xDense(original_model,entity_encodings,concept_e
         d2 = original_model.get_layer(layerss[2])
         sim = layers.dot([entity_encodings, concept_encodings], axes=-1, normalize=True)
         prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(sim)
-    except ValueError: # no decision layer
+    except AttributeError: # no decision layer
         prediction_layer = layers.dot([entity_encodings, concept_encodings], axes=-1, normalize=True)
     model = Model(inputs=[entity_encodings,concept_encodings], outputs=prediction_layer)
     return model
@@ -488,22 +489,27 @@ import cnn, model_tools
 if sysargv1 == 'no_sim':
     model, entity_model, concept_model = cnn.build_model_shared_encoder_nosim(config,vocabulary,pretrained)
 elif sysargv2 == 'full':
-    if sysargv2 == 'sem_matrix':
+    if sysargv1 == 'sem_matrix':
         model, entity_model, concept_model = cnn.build_model_generator(config,vocabulary,pretrained)
-    elif sysargv2 == 'cosine_sim':
+    elif sysargv1 == 'cosine_sim':
         model, entity_model, concept_model = cnn.build_model_shared_encoder_dot(config,tr_data,vocabulary,pretrained)
+    else:
+        raise ValueError
 elif sysargv2 == 'ablation':
-    if sysargv2 == 'sem_matrix':
+    if sysargv1 == 'sem_matrix':
         model, entity_model, concept_model = cnn.build_model_shared_encoder_xDense(config,tr_data,vocabulary,pretrained,decision_layer=True)
-    elif sysargv2 == 'cosine_sim':
+    elif sysargv1 == 'cosine_sim':
         model, entity_model, concept_model = cnn.build_model_shared_encoder_dot_xDense(config,tr_data,vocabulary,pretrained,decision_layer=False)
-
+    else:
+        raise ValueError
+else:
+    raise ValueError
 
 dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
 
 train_examples = examples(config, concept, positives_training, vocabulary)
 dev_examples = examples(config, concept, positives_dev, vocabulary)
 
-hist = model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev.names), epochs=config.getint('training','epoch'), callbacks=[dev_eval_function])    
+hist = model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev.names), epochs=config.getint('training','epoch'), callbacks=[dev_eval_function])
 
 #import pdb; pdb.set_trace()
