@@ -460,42 +460,42 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         self.losses.append(logs.get('loss'))
-
-        evaluation_parameter = predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data)
+        evaluation_parameter = predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.original_model, self.val_data)
         self.accuracy.append(evaluation_parameter)
 
         with open(self.history,'a',encoding='utf-8') as f:
             f.write('Epoch: {0}, Training loss: {1}, validation accuracy: {2}\n'.format(epoch,logs.get('loss'),evaluation_parameter))
-
+            if logs.get('val_loss'):
+                f.write('Epoch: {0}, Validation loss: {1}\n'.format(epoch,logs.get('val_loss')))
+              
         if evaluation_parameter > self.best:
             logging.info('Intermediate model saved.')
             self.best = evaluation_parameter
-            self.model.save(self.model_path)
+            self.original_model.save(self.model_path)
             self.wait = 0
             # something here to print trec_eval doc
         else:
             self.wait += 1
             if self.wait > int(self.conf['training']['patience']):
                 self.stopped_epoch = epoch
-                self.model.stop_training = True
-        if self.save and self.model.stop_training:
-            logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
-            model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
-        logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+                self.original_model.stop_training = True
+        # if self.save and self.original_model.stop_training:
+        #     logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
+        #     model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
+        logger.info('Testing: epoch: {0}, self.original_model.stop_training: {1}'.format(epoch,self.original_model.stop_training))
         return
 
     def on_train_end(self, logs=None):
         if self.stopped_epoch > 0:
-            logging.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
+            logger.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
         try:
-            from cnn import semantic_similarity_layer, ranking_loss
-            from keras.models import load_model
-            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer, 'ranking_loss':ranking_loss})
+            self.original_model.load_weights(self.model_path)
+            logger.info('Best model reloaded.')
         except OSError:
             pass
-        predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
+        predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.original_model, self.val_data, result=self.history)
         if self.conf.getint('model','save'):
-            callback.save_model(self.model, self.conf['model']['path'],self.now)
+            callback.save_model(self.original_model, self.conf['model']['path'],self.now)
         return
 
     def on_batch_end(self, batch, logs={}):

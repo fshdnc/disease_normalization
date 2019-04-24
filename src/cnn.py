@@ -394,7 +394,7 @@ def forward_pass_speedup_shared_encoder(model,corpus_padded,concept_padded,pretr
     model_sem = _forward_pass_speedup_sem(model,convoluted_input)
     return convoluted_input, model_sem
 
-def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
+def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained,decision_layer=True):
     inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
@@ -419,9 +419,11 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained):
     entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
     concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
-    v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
-
-    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(v_sem)  
+    if decision_layer:
+        v_sem = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
+        prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(v_sem) 
+    else:
+        prediction_layer = semantic_similarity_layer(name='v_sem')([pooled_mentions,pooled_candidates])
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -502,7 +504,7 @@ def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
 
     return model, entity_model, concept_model
 
-def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrained):
+def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrained,decision_layer=True):
     inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
     inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
 
@@ -521,10 +523,11 @@ def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrain
     entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
     concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
-    #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
-    prediction_layer = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
-
-    #prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(cos_sim)  
+    if decision_layer:
+        cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
+        prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(cos_sim)  
+    else:
+        prediction_layer = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
 
     # list of input layers
     input_list = [inp_mentions,inp_candidates]
@@ -636,3 +639,37 @@ def forward_pass_speedup_shared_encoder_dot_xDense(model,corpus_padded,concept_p
     convoluted_input = sped_up_format_x(mentions,candidates)
     model_sem = _forward_pass_speedup_dot_xDense(model,convoluted_input)
     return convoluted_input, model_sem
+
+
+def build_model_shared_encoder_nosim(conf,vocabulary,pretrained):
+    inp_mentions = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_mentions')
+    inp_candidates = Input(shape=(conf.getint('embedding','length'),),dtype='int32', name='inp_candidates')
+
+    embedding_layer = Embedding(len(vocabulary), pretrained.shape[1], mask_zero=False, trainable=False, weights=[pretrained], name='embedding_layer')
+    drop = layers.Dropout(conf.getfloat('cnn','dropout'),name='drop')
+    encoded_mentions = drop(embedding_layer(inp_mentions))
+    encoded_candidates = drop(embedding_layer(inp_candidates))
+
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv1d')
+    conv_mentions = SharedConv(encoded_mentions)
+    conv_candidates = SharedConv(encoded_candidates)
+
+    pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
+    pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
+
+    entity_model = Model(inputs=inp_mentions, outputs=pooled_mentions)
+    concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
+
+    concatenate_list = [pooled_mentions,pooled_candidates]
+
+    join_layer = Concatenate()(concatenate_list)
+    hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
+    prediction_layer = Dense(1,activation='sigmoid',name='prediction_layer')(hidden_layer)  
+
+    # list of input layers
+    input_list = [inp_mentions,inp_candidates]
+
+    model = Model(inputs=input_list, outputs=prediction_layer)
+    model.compile(optimizer=return_optimizer(conf), loss=return_loss(conf))
+
+    return model, entity_model, concept_model

@@ -6,6 +6,8 @@ second argv: 'full', 'ablation'
 import sys
 assert sys.argv[1] == 'separate' or sys.argv[1] == 'shared'
 assert sys.argv[2] == 'full' or sys.argv[2] == 'ablation'
+sysargv1 = sys.argv[1]
+sysargv2 = sys.argv[2]
 
 import random
 random.seed(1)
@@ -49,7 +51,7 @@ config['cnn']['loss'] = 'binary_crossentropy'
 config['cnn']['dropout'] = '0.5'
 config['embedding']['length'] = '10'
 config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'final experiment, synonym pairs, architectue:'+ sys.argv[1] + ' encoder, ' + sys.argv[2] + ', continue training lr=0.00005, truncated dev set'
+config['note']['note'] = 'final experiment, synonym pairs, architectue:'+ sysargv1 + ' encoder, ' + sysargv2 + ', continue training lr=0.00005, truncated dev set'
 #################################################
 if config.getint('settings','gpu'):
     import tensorflow as tf
@@ -356,14 +358,14 @@ def predict(config, concept, positives, vocab, entity_model, concept_model, orig
     layerss = ['v_sem','hidden_layer','prediction_layer']
     v_sem = original_model.get_layer(layerss[0])
     d2 = original_model.get_layer(layerss[2])
-    if sys.argv[2] == 'full':
+    if sysargv2 == 'full':
         d1 = original_model.get_layer(layerss[1])
 
     entity_encodings = Input(shape=(convoluted_input[0].shape[1],),dtype='float32', name='entity_encodings')
     concept_encodings = Input(shape=(convoluted_input[1].shape[1],),dtype='float32', name='concept_encodings')
     sem = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
     
-    if sys.argv[2] == 'full':  
+    if sysargv2 == 'full':  
         concatenate_list = [entity_encodings,concept_encodings,sem]
         join_layer = Concatenate()(concatenate_list)
         hidden_layer = Dense(d1.units, activation=d1.activation,weights=d1.get_weights())(join_layer)
@@ -426,7 +428,7 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         self.losses.append(logs.get('loss'))
-        evaluation_parameter = predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data)
+        evaluation_parameter = predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.original_model, self.val_data)
         self.accuracy.append(evaluation_parameter)
 
         with open(self.history,'a',encoding='utf-8') as f:
@@ -437,33 +439,31 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
         if evaluation_parameter > self.best:
             logging.info('Intermediate model saved.')
             self.best = evaluation_parameter
-            self.model.save(self.model_path)
+            self.original_model.save(self.model_path)
             self.wait = 0
             # something here to print trec_eval doc
         else:
             self.wait += 1
             if self.wait > int(self.conf['training']['patience']):
                 self.stopped_epoch = epoch
-                self.model.stop_training = True
-        # if self.save and self.model.stop_training:
+                self.original_model.stop_training = True
+        # if self.save and self.original_model.stop_training:
         #     logger.info('Saving predictions to {0}'.format(self.conf['model']['path_saved_predictions']))
         #     model_tools.save_predictions(self.conf['model']['path_saved_predictions'],test_y) #(filename,predictions)
-        logger.info('Testing: epoch: {0}, self.model.stop_training: {1}'.format(epoch,self.model.stop_training))
+        logger.info('Testing: epoch: {0}, self.original_model.stop_training: {1}'.format(epoch,self.original_model.stop_training))
         return
 
     def on_train_end(self, logs=None):
         if self.stopped_epoch > 0:
             logger.info('Epoch %05d: early stopping', self.stopped_epoch + 1)
         try:
-            from cnn import semantic_similarity_layer #, ranking_loss
-            from keras.models import load_model
-            self.model = load_model(self.model_path,custom_objects={'semantic_similarity_layer': semantic_similarity_layer}) #, 'ranking_loss':ranking_loss})
+            self.original_model.load_weights(self.model_path)
             logger.info('Best model reloaded.')
         except OSError:
             pass
-        predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.model, self.val_data, result=self.history)
+        predict(self.conf, self.concept, self.positives, self.vocab, self.entity_model, self.concept_model,self.original_model, self.val_data, result=self.history)
         if self.conf.getint('model','save'):
-            callback.save_model(self.model, self.conf['model']['path'],self.now)
+            callback.save_model(self.original_model, self.conf['model']['path'],self.now)
         return
 
     def on_batch_end(self, batch, logs={}):
@@ -475,15 +475,15 @@ from model_tools import load_model, save_model
 import cnn, model_tools
 
 
-if sys.argv[1] == 'separate':
-    if sys.argv[2] == 'full':
+if sysargv1 == 'separate':
+    if sysargv2 == 'full':
         model, entity_model, concept_model = cnn.build_model(config,tr_data,vocabulary,pretrained)
-    elif sys.argv[2] == 'ablation':
+    elif sysargv2 == 'ablation':
         model, entity_model, concept_model = cnn.build_model_maxpool_ablation(config,tr_data,vocabulary,pretrained)
-elif sys.argv[1] == 'shared':
-    if sys.argv[2] == 'full':
+elif sysargv1 == 'shared':
+    if sysargv2 == 'full':
         model, entity_model, concept_model = cnn.build_model_generator(config,vocabulary,pretrained)
-    elif sys.argv[2] == 'ablation':
+    elif sysargv2 == 'ablation':
         model, entity_model, concept_model = cnn.build_model_shared_encoder_xDense(config,tr_data,vocabulary,pretrained)
 
 dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
@@ -493,7 +493,7 @@ hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[dev
 
 # save the weights for semantic similarity matrix
 weights = model.get_layer('v_sem').get_weights()
-name = 'fe_synpair_' + sys.argv[1]+'_'+sys.argv[2]+'.pickle'
+name = 'fe_synpair_' + sysargv1+'_'+sysargv2+'.pickle'
 with open(name,'wb') as f:
     pickle.dump(weights,f)
 
