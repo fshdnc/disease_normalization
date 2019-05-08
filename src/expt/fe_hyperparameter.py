@@ -1,25 +1,28 @@
 '''
-Test different architectures: starting from shared encoder with dense layer
-    1. shared encoder (CNN), semantic similarity layer, w/ dense layer
-    2. shared encoder (CNN), semantic similarity layer, no dense layer
-    3. shared encoder (CNN), dot product, w/ dense layer
-    4. shared encoder (CNN), dot product, no dense layer
-    5. no similarity measure at all
-first argv: 'sem_matrix', 'cosine_sim', or 'no_sim'
-second argv: 'full', 'ablation'
-optional third argument: 'pretrain'
+Test hyperparameters:
+    1. dropout ['cnn']['dropout']: 0, 0.1, 0.25, 0.5, 0,75
+    2. filters ['cnn']['filters']: 10, 25, 50, 100, 150
+    3. kernel_size ['cnn']['kernel_size']: 1, 2, 3, 4, 5
+    4. cnn_activation ['cnn']['activation']: tanh, relu
+fifth argv: 'sem_matrix', 'cosine_sim'
+sixth argv: machine, either 'evex' or 'nlpgpu1'
+optional seventh argument: False (no pretraining), default with pre-training
 '''
 
 import sys
-assert sys.argv[1] == 'sem_matrix' or sys.argv[1] == 'cosine_sim' or sys.argv[1] == 'no_sim'
-assert sys.argv[2] == 'full' or sys.argv[2] == 'ablation'
+assert sys.argv[5] == 'cosine_sim' or sys.argv[5] == 'sem_matrix'
+assert sys.argv[6] == 'evex' or sys.argv[6] == 'nlpgpu1' sys.argv[6] == 'taito'
 sysargv1 = sys.argv[1]
 sysargv2 = sys.argv[2]
+sysargv3 = sys.argv[3]
+sysargv4 = sys.argv[4]
+sysargv5 = sys.argv[5]
 try:
-    sys.argv[3]
-    pretraining = True
-except NameError:
+    sys.argv[7]
     pretraining = False
+    config['training']['epoch'] = '200'
+except IndexError:
+    pretraining = True
 
 import random
 random.seed(1)
@@ -42,34 +45,45 @@ import sample
 
 
 #configurations
-dynamic_defaults = {'timestamp': time.strftime('%Y%m%d-%H%M%S')}
+TIME = time.strftime('%Y%m%d-%H%M%S')
+dynamic_defaults = {'timestamp': TIME}
 config = cp.ConfigParser(defaults=dynamic_defaults,interpolation=cp.ExtendedInterpolation(),strict=False)
 try:
     directory = os.path.join(os.path.abspath(os.path.dirname(__file__)))
-    config.read(os.path.join(directory, 'defaults.cfg'))
+    config.read(os.path.join(directory, 'fe.cfg'))
 except NameError:
     directory = '/home/lhchan/disease_normalization/src'
-    config.read(os.path.join(directory, 'defaults.cfg'))
+    config.read(os.path.join(directory, 'fe.cfg'))
 #################################################
 config['embedding']['emb_file'] = os.path.join(directory, '../../disease_normalization/data/pubmed2018_w2v_200D/pubmed2018_w2v_200D.bin')
 config['terminology']['dict_file'] = os.path.join(directory, '../../old-disease-normalization/data/ncbi-disease/CTD_diseases.tsv')
 config['corpus']['training_file'] = os.path.join(directory,'../../old-disease-normalization/data/ncbi-disease/NCBItrainset_corpus.txt')
 config['corpus']['development_file'] = os.path.join(directory,'../../old-disease-normalization/data/ncbi-disease/NCBIdevelopset_corpus.txt')
-config['settings']['history'] = os.path.join(directory, '../gitig/log/')
-config['cnn']['filters'] = '50'
-config['cnn']['optimizer'] = 'adam'
-config['cnn']['lr'] = '0.00005'
-config['cnn']['loss'] = 'binary_crossentropy'
-config['cnn']['dropout'] = '0.5'
-config['embedding']['length'] = '10'
-config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'final experiment, ablation, no pretraining, architectue: '+ sysargv1 + ' encoder, ' + sysargv2
+
+if sys.argv[6] == 'nlpgpu1':
+    config['settings']['gpu'] = '1'
+    config['settings']['history'] = 'normalization/'
+    config['model']['path_model_whole'] = 'normalization/model_' + TIME + '.h5'
+elif sys.argv[6] == 'evex':
+    config['settings']['gpu'] = '0'
+    config['settings']['history'] = os.path.join(directory, '../gitig/log/')
+elif sys.argv[6] == 'taito':
+    config['settings']['gpu'] = '0'
+    config['model']['path_model_whole'] = 'normalization/model_' + TIME + '.h5'
+else:
+    raise ValueError('Unknown machine.')
+config['cnn']['dropout'] = sysargv1
+config['cnn']['filters'] = sysargv2
+config['cnn']['kernel_size'] = sysargv3
+config['cnn']['activation'] = sysargv4
+config['training']['pretraining'] = 'True' if pretraining else 'False'
+config['note']['note'] = 'final experiment, cnn hyperparameter search' + sysargv5 + ', pretrain(synpair)' + config['training']['pretraining'] + ', dropout='+sysargv1+', filter number='+sysargv2+', kernel size='+sysargv3+', cnn activation='+sysargv4
 #################################################
 if config.getint('settings','gpu'):
     import tensorflow as tf
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth=True
-    sess = tf.Session(config=config)
+    gpu_config = tf.ConfigProto()
+    gpu_config.gpu_options.allow_growth=True
+    sess = tf.Session(config=gpu_config)
 
 
 #logging
@@ -222,54 +236,55 @@ for corpus in [corpus_train]:
 #     #corpus.vectorize = None
 
 
-# create synthetic training data
-def generate_synonym_pairs(dictionary, order=None):
-    concept_synonyms = []
+if pretraining:
+    # create synthetic training data
+    def generate_synonym_pairs(dictionary, order=None):
+        concept_synonyms = []
 
-    if order:
-        use = order
-        logger.info('Re-initializing concept object.')
-    else:
-        use = dictionary.loaded.keys()
+        if order:
+            use = order
+            logger.info('Re-initializing concept object.')
+        else:
+            use = dictionary.loaded.keys()
 
-    for k in use:
-        concept_synonyms.append(dictionary.loaded[k].AllNames)
+        for k in use:
+            concept_synonyms.append(dictionary.loaded[k].AllNames)
 
-    synonym_pairs = []
-    for concept in concept_synonyms:
-        for i,name in enumerate(concept):
-            for j in range(len(concept)-i):
-                synonym_pairs.append((name,concept[j]))
+        synonym_pairs = []
+        for concept in concept_synonyms:
+            for i,name in enumerate(concept):
+                for j in range(len(concept)-i):
+                    synonym_pairs.append((name,concept[j]))
 
-    return synonym_pairs
+        return synonym_pairs
 
-synonym_pairs = generate_synonym_pairs(dictionary,order=concept_order)
-questions = [question for question, answer in synonym_pairs]
-answers = [answer for question, answer in synonym_pairs]
-# FIXME: there may be positives as well
-# negatives = random.choices(concept.names,k=len(questions)) # this only works for python 3.6 +
-negatives = [random.choice(concept.names) for i in range(len(questions))]
-
-
-collection = []
-for question, positive, negative in zip(questions,answers,negatives):
-    collection.extend([(question,positive,1),(question,negative,0)])
-random.shuffle(collection)
-tr_data = sample.Data()
+    synonym_pairs = generate_synonym_pairs(dictionary,order=concept_order)
+    questions = [question for question, answer in synonym_pairs]
+    answers = [answer for question, answer in synonym_pairs]
+    # FIXME: there may be positives as well
+    # negatives = random.choices(concept.names,k=len(questions)) # this only works for python 3.6 +
+    negatives = [random.choice(concept.names) for i in range(len(questions))]
 
 
-for sat, data in zip([collection],[tr_data]):
-    x0 = []
-    x1 = []
-    y = []
-    for q,a,l in sat:
-        x0.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(q)])
-        x1.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(a)])
-        y.append(l)
-    x0 = pad_sequences(np.array(x0), padding='post', maxlen=int(config['embedding']['length']))
-    x1 = pad_sequences(np.array(x1), padding='post', maxlen=int(config['embedding']['length']))
-    data.x = [x0,x1]
-    data.y = np.array(y)
+    collection = []
+    for question, positive, negative in zip(questions,answers,negatives):
+        collection.extend([(question,positive,1),(question,negative,0)])
+    random.shuffle(collection)
+    tr_data = sample.Data()
+
+
+    for sat, data in zip([collection],[tr_data]):
+        x0 = []
+        x1 = []
+        y = []
+        for q,a,l in sat:
+            x0.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(q)])
+            x1.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(a)])
+            y.append(l)
+        x0 = pad_sequences(np.array(x0), padding='post', maxlen=int(config['embedding']['length']))
+        x1 = pad_sequences(np.array(x1), padding='post', maxlen=int(config['embedding']['length']))
+        data.x = [x0,x1]
+        data.y = np.array(y)
 
 
 # sampling
@@ -351,17 +366,6 @@ from keras import layers
 from cnn import semantic_similarity_layer
 import callback
 
-def _predict_shared_encoder_nosim(original_model,entity_encodings,concept_encodings):
-    layerss = ['v_sem','hidden_layer','prediction_layer']
-    d1 = original_model.get_layer(layerss[1])
-    d2 = original_model.get_layer(layerss[2])
-    concatenate_list = [entity_encodings,concept_encodings]
-    join_layer = Concatenate()(concatenate_list)
-    hidden_layer = Dense(d1.units, activation=d1.activation,weights=d1.get_weights())(join_layer)
-    prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(hidden_layer)
-    model = Model(inputs=[entity_encodings,concept_encodings], outputs=prediction_layer)
-    return model
-
 def _predict_shared_encoder(original_model,entity_encodings,concept_encodings):
     layerss = ['v_sem','hidden_layer','prediction_layer']
     v_sem = original_model.get_layer(layerss[0])
@@ -387,30 +391,6 @@ def _predict_shared_encoder_dot(original_model,entity_encodings,concept_encoding
     model = Model(inputs=[entity_encodings,concept_encodings], outputs=prediction_layer)
     return model
 
-def _predict_shared_encoder_xDense(original_model,entity_encodings,concept_encodings):
-    layerss = ['v_sem','hidden_layer','prediction_layer']
-    try:
-        v_sem = original_model.get_layer(layerss[0])
-        d2 = original_model.get_layer(layerss[2])
-        sem = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
-        prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(sem)
-    except ValueError: # no decision layer
-        v_sem = original_model.get_layer(layerss[2])
-        prediction_layer = cnn.semantic_similarity_layer(weights = v_sem.get_weights())([entity_encodings,concept_encodings])
-    model = Model(inputs=[entity_encodings,concept_encodings], outputs=prediction_layer)
-    return model
-
-def _predict_shared_encoder_dot_xDense(original_model,entity_encodings,concept_encodings):
-    layerss = ['v_sem','hidden_layer','prediction_layer']
-    try:
-        d2 = original_model.get_layer(layerss[2])
-        sim = layers.dot([entity_encodings, concept_encodings], axes=-1, normalize=True)
-        prediction_layer = Dense(d2.units, activation=d2.activation,weights=d2.get_weights())(sim)
-    except AttributeError: # no decision layer
-        prediction_layer = layers.dot([entity_encodings, concept_encodings], axes=-1, normalize=True)
-    model = Model(inputs=[entity_encodings,concept_encodings], outputs=prediction_layer)
-    return model
-
 def predict(config, concept, positives, vocab, entity_model, concept_model, original_model,val_data,result=None):
     entity_examples = examples_evaluation(config, concept, positives, vocab)
 
@@ -427,18 +407,10 @@ def predict(config, concept, positives, vocab, entity_model, concept_model, orig
     entity_encodings = Input(shape=(convoluted_input[0].shape[1],),dtype='float32', name='entity_encodings')
     concept_encodings = Input(shape=(convoluted_input[1].shape[1],),dtype='float32', name='concept_encodings')
 
-    if sysargv1 == 'no_sim':
-        model = _predict_shared_encoder_nosim(original_model,entity_encodings,concept_encodings)
-    elif sysargv2 == 'full':
-        if sysargv1 == 'sem_matrix':
-            model = _predict_shared_encoder(original_model,entity_encodings,concept_encodings)
-        elif sysargv1 == 'cosine_sim':
-            model = _predict_shared_encoder_dot(original_model,entity_encodings,concept_encodings)
-    elif sysargv2 == 'ablation':
-        if sysargv1 == 'sem_matrix':
-            model = _predict_shared_encoder_xDense(original_model,entity_encodings,concept_encodings)
-        elif sysargv1 == 'cosine_sim':
-            model = _predict_shared_encoder_dot_xDense(original_model,entity_encodings,concept_encodings)
+    if sysargv5 == 'sem_matrix':
+        model = _predict_shared_encoder(original_model,entity_encodings,concept_encodings)
+    elif sysargv5 == 'cosine_sim':
+        model = _predict_shared_encoder_dot(original_model,entity_encodings,concept_encodings)
 
     test_y = model.predict(convoluted_input)
 
@@ -477,7 +449,7 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
         self.patience = int(conf['training']['patience'])
         self.model_path = conf['model']['path_model_whole']
 
-        self.save = int(self.conf['settings']['save_prediction'])
+        #self.save = int(self.conf['settings']['save_prediction'])
         self.now = datetime.now().strftime('%Y%m%d-%H%M%S')
         self.history = self.conf['settings']['history'] + self.now + '.txt'
         callback.write_training_info(self.conf,self.history)
@@ -540,34 +512,24 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 from model_tools import load_model, save_model
 import cnn, model_tools
 
-try:
-    tr_data
-except NameError:
+if not pretraining:
     tr_data = 'dummy'
 
-if sysargv1 == 'no_sim':
-    model, entity_model, concept_model = cnn.build_model_shared_encoder_nosim(config,vocabulary,pretrained)
-elif sysargv2 == 'full':
-    if sysargv1 == 'sem_matrix':
-        model, entity_model, concept_model = cnn.build_model_generator(config,vocabulary,pretrained)
-    elif sysargv1 == 'cosine_sim':
-        model, entity_model, concept_model = cnn.build_model_shared_encoder_dot(config,tr_data,vocabulary,pretrained)
-    else:
-        raise ValueError
-elif sysargv2 == 'ablation':
-    if sysargv1 == 'sem_matrix':
-        model, entity_model, concept_model = cnn.build_model_shared_encoder_xDense(config,tr_data,vocabulary,pretrained,decision_layer=True)
-    elif sysargv1 == 'cosine_sim':
-        model, entity_model, concept_model = cnn.build_model_shared_encoder_dot_xDense(config,tr_data,vocabulary,pretrained,decision_layer=False)
-    else:
-        raise ValueError
+
+if sysargv5 == 'sem_matrix':
+    model, entity_model, concept_model = cnn.build_model_generator(config,vocabulary,pretrained)
+elif sysargv5 == 'cosine_sim':
+    model, entity_model, concept_model = cnn.build_model_shared_encoder_dot(config,tr_data,vocabulary,pretrained)
 else:
     raise ValueError
 
-dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
-hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[dev_eval_function])
 
-logger.info('Pretraining with synonym pairs finished. Continue training with real data.')
+dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
+
+if pretraining:
+    hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[dev_eval_function])
+    logger.info('Pretraining with synonym pairs finished. Continue training with real data.')
+    del tr_data
 
 positives_training, positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
@@ -578,5 +540,6 @@ train_examples = examples(config, concept, positives_training, vocabulary)
 dev_examples = examples(config, concept, positives_dev, vocabulary)
 
 hist = model.fit_generator(train_examples, steps_per_epoch=len(corpus_train.names), validation_data=dev_examples, validation_steps=len(corpus_dev.names), epochs=config.getint('training','epoch'), callbacks=[dev_eval_function])
+
 
 #import pdb; pdb.set_trace()

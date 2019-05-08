@@ -112,13 +112,13 @@ def build_model(conf,training_data,vocabulary,pretrained):
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
-    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
     if conf.getint('embedding','elmo'):
-        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_mentions_elmo)
-        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_candidates_elmo)
+        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_candidates_elmo)
         pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
@@ -168,8 +168,8 @@ def build_model_maxpool_ablation(conf,training_data,vocabulary,pretrained):
     encoded_mentions = embedding_layer(inp_mentions)
     encoded_candidates = embedding_layer(inp_candidates)
 
-    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
-    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
 
@@ -198,7 +198,7 @@ def build_model_generator(conf,vocabulary,pretrained): # shared encoder
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
@@ -298,13 +298,13 @@ def build_model_custom_loss(conf,training_data,vocabulary,pretrained,track_obj):
     encoded_mentions = embedding_layer(inp_mentions)
     encoded_candidates = embedding_layer(inp_candidates)
 
-    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
-    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
+    conv_mentions = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv_mentions')(encoded_mentions) #input_shape=(2000,16,50)
+    conv_candidates = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv_candidates')(encoded_candidates) #input_shape=(2000,16,50)
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
     if conf.getint('embedding','elmo'):
-        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_mentions_elmo)
-        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_candidates_elmo)
+        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_candidates_elmo)
         pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
@@ -340,7 +340,7 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv1d')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv1d')
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
@@ -351,8 +351,8 @@ def build_model_shared_encoder(conf,training_data,vocabulary,pretrained):
     concept_model = Model(inputs=inp_candidates, outputs=pooled_candidates)
 
     if conf.getint('embedding','elmo'):
-        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_mentions_elmo)
-        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_candidates_elmo)
+        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_candidates_elmo)
         pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
@@ -403,15 +403,15 @@ def build_model_shared_encoder_xDense(conf,training_data,vocabulary,pretrained,d
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
     pooled_mentions = GlobalMaxPooling1D()(conv_mentions)
     pooled_candidates = GlobalMaxPooling1D()(conv_candidates)
     if conf.getint('embedding','elmo'):
-        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_mentions_elmo)
-        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu')(inp_candidates_elmo)
+        conv_mentions_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_mentions_elmo)
+        conv_candidates_elmo = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'])(inp_candidates_elmo)
         pooled_mentions_elmo = GlobalMaxPooling1D()(conv_mentions_elmo)
         pooled_candidates_elmo = GlobalMaxPooling1D()(conv_candidates_elmo)
         v_sem_elmo = semantic_similarity_layer()([pooled_mentions_elmo,pooled_candidates_elmo])
@@ -472,7 +472,7 @@ def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv1d')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv1d')
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
@@ -485,12 +485,12 @@ def build_model_shared_encoder_dot(conf,training_data,vocabulary,pretrained):
     #v_sem = semantic_similarity_layer()([pooled_mentions,pooled_candidates])
     cos_sim = layers.dot([pooled_mentions, pooled_candidates], axes=-1, normalize=True, name='cos_sim')
 
-    # list of layers for concatenation
+    ## list of layers for concatenation
     concatenate_list = [pooled_mentions,pooled_candidates,cos_sim]
-    if int(conf['candidate']['use']):
-        concatenate_list.append(inp_scores)
-    if conf.getint('embedding','elmo'):
-        concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
+    # if int(conf['candidate']['use']):
+    #     concatenate_list.append(inp_scores)
+    # if conf.getint('embedding','elmo'):
+    #     concatenate_list.extend([pooled_mentions_elmo,pooled_candidates_elmo,v_sem_elmo])
 
     join_layer = Concatenate()(concatenate_list)
     hidden_layer = Dense(64, activation='relu',name='hidden_layer')(join_layer)
@@ -513,7 +513,7 @@ def build_model_shared_encoder_dot_xDense(conf,training_data,vocabulary,pretrain
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv1d')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv1d')
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
@@ -546,7 +546,7 @@ def build_model_dot(conf,training_data,vocabulary,pretrained):
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv1d')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv1d')
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 
@@ -649,7 +649,7 @@ def build_model_shared_encoder_nosim(conf,vocabulary,pretrained):
     encoded_mentions = drop(embedding_layer(inp_mentions))
     encoded_candidates = drop(embedding_layer(inp_candidates))
 
-    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation='relu',name='conv1d')
+    SharedConv = Conv1D(filters=conf.getint('cnn','filters'),kernel_size=conf.getint('cnn','kernel_size'),activation=conf['cnn']['activation'],name='conv1d')
     conv_mentions = SharedConv(encoded_mentions)
     conv_candidates = SharedConv(encoded_candidates)
 

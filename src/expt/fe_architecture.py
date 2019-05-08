@@ -1,25 +1,27 @@
 '''
-Test different architectures: starting from shared encoder with dense layer
-    1. shared encoder (CNN), semantic similarity layer, w/ dense layer
-    2. shared encoder (CNN), semantic similarity layer, no dense layer
-    3. shared encoder (CNN), dot product, w/ dense layer
-    4. shared encoder (CNN), dot product, no dense layer
-    5. no similarity measure at all
-first argv: 'sem_matrix', 'cosine_sim', or 'no_sim'
-second argv: 'full', 'ablation'
-optional third argument: 'pretrain'
+Test different architectures:
+    shared encoder with (semantic similarity matrix / cosine similarity)
+
+first argv: 'sem_matrix', 'cosine_sim'
+second argv: 'cnn', 'lstm'
+third argv: 'shared', 'partial'
+optional fourth argument: 'pretraining'
 '''
+raise NotImplementedError('cnn should not have partially shared?')
 
 import sys
 assert sys.argv[1] == 'sem_matrix' or sys.argv[1] == 'cosine_sim' or sys.argv[1] == 'no_sim'
-assert sys.argv[2] == 'full' or sys.argv[2] == 'ablation'
+assert sys.argv[2] == 'cnn' or sys.argv[2] == 'lstm'
+assert sys.argv[3] == 'shared' or sys.argv[3] == 'partial'
 sysargv1 = sys.argv[1]
 sysargv2 = sys.argv[2]
+sysargv3 = sys.argv[3]
 try:
-    sys.argv[3]
+    sys.argv[4]
     pretraining = True
 except NameError:
     pretraining = False
+    config['training']['epoch'] = '200'
 
 import random
 random.seed(1)
@@ -63,7 +65,7 @@ config['cnn']['loss'] = 'binary_crossentropy'
 config['cnn']['dropout'] = '0.5'
 config['embedding']['length'] = '10'
 config['embedding']['limit'] = '1000000'
-config['note']['note'] = 'final experiment, ablation, no pretraining, architectue: '+ sysargv1 + ' encoder, ' + sysargv2
+config['note']['note'] = 'final experiment, architecture, synpair pretraining: ' + pretraining + ', similarity measure: '+ sysargv1 + ' encoder, ' + sysargv2 + ' ' + sysargv3
 #################################################
 if config.getint('settings','gpu'):
     import tensorflow as tf
@@ -222,54 +224,55 @@ for corpus in [corpus_train]:
 #     #corpus.vectorize = None
 
 
-# create synthetic training data
-def generate_synonym_pairs(dictionary, order=None):
-    concept_synonyms = []
+if pretraining:
+    # create synthetic training data
+    def generate_synonym_pairs(dictionary, order=None):
+        concept_synonyms = []
 
-    if order:
-        use = order
-        logger.info('Re-initializing concept object.')
-    else:
-        use = dictionary.loaded.keys()
+        if order:
+            use = order
+            logger.info('Re-initializing concept object.')
+        else:
+            use = dictionary.loaded.keys()
 
-    for k in use:
-        concept_synonyms.append(dictionary.loaded[k].AllNames)
+        for k in use:
+            concept_synonyms.append(dictionary.loaded[k].AllNames)
 
-    synonym_pairs = []
-    for concept in concept_synonyms:
-        for i,name in enumerate(concept):
-            for j in range(len(concept)-i):
-                synonym_pairs.append((name,concept[j]))
+        synonym_pairs = []
+        for concept in concept_synonyms:
+            for i,name in enumerate(concept):
+                for j in range(len(concept)-i):
+                    synonym_pairs.append((name,concept[j]))
 
-    return synonym_pairs
+        return synonym_pairs
 
-synonym_pairs = generate_synonym_pairs(dictionary,order=concept_order)
-questions = [question for question, answer in synonym_pairs]
-answers = [answer for question, answer in synonym_pairs]
-# FIXME: there may be positives as well
-# negatives = random.choices(concept.names,k=len(questions)) # this only works for python 3.6 +
-negatives = [random.choice(concept.names) for i in range(len(questions))]
-
-
-collection = []
-for question, positive, negative in zip(questions,answers,negatives):
-    collection.extend([(question,positive,1),(question,negative,0)])
-random.shuffle(collection)
-tr_data = sample.Data()
+    synonym_pairs = generate_synonym_pairs(dictionary,order=concept_order)
+    questions = [question for question, answer in synonym_pairs]
+    answers = [answer for question, answer in synonym_pairs]
+    # FIXME: there may be positives as well
+    # negatives = random.choices(concept.names,k=len(questions)) # this only works for python 3.6 +
+    negatives = [random.choice(concept.names) for i in range(len(questions))]
 
 
-for sat, data in zip([collection],[tr_data]):
-    x0 = []
-    x1 = []
-    y = []
-    for q,a,l in sat:
-        x0.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(q)])
-        x1.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(a)])
-        y.append(l)
-    x0 = pad_sequences(np.array(x0), padding='post', maxlen=int(config['embedding']['length']))
-    x1 = pad_sequences(np.array(x1), padding='post', maxlen=int(config['embedding']['length']))
-    data.x = [x0,x1]
-    data.y = np.array(y)
+    collection = []
+    for question, positive, negative in zip(questions,answers,negatives):
+        collection.extend([(question,positive,1),(question,negative,0)])
+    random.shuffle(collection)
+    tr_data = sample.Data()
+
+
+    for sat, data in zip([collection],[tr_data]):
+        x0 = []
+        x1 = []
+        y = []
+        for q,a,l in sat:
+            x0.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(q)])
+            x1.append([vocabulary.get(tok.lower(),1) for tok in nltk.word_tokenize(a)])
+            y.append(l)
+        x0 = pad_sequences(np.array(x0), padding='post', maxlen=int(config['embedding']['length']))
+        x1 = pad_sequences(np.array(x1), padding='post', maxlen=int(config['embedding']['length']))
+        data.x = [x0,x1]
+        data.y = np.array(y)
 
 
 # sampling
@@ -540,34 +543,42 @@ class EarlyStoppingRankingAccuracyGenerator(Callback):
 from model_tools import load_model, save_model
 import cnn, model_tools
 
-try:
-    tr_data
-except NameError:
+if not pretraining:
     tr_data = 'dummy'
 
-if sysargv1 == 'no_sim':
-    model, entity_model, concept_model = cnn.build_model_shared_encoder_nosim(config,vocabulary,pretrained)
-elif sysargv2 == 'full':
-    if sysargv1 == 'sem_matrix':
+
+if sysargv1 == 'sem_matrix':
+    if sysargv2 == 'cnn' and sysargv3 == 'shared':
         model, entity_model, concept_model = cnn.build_model_generator(config,vocabulary,pretrained)
-    elif sysargv1 == 'cosine_sim':
-        model, entity_model, concept_model = cnn.build_model_shared_encoder_dot(config,tr_data,vocabulary,pretrained)
+    elif sysargv2 == 'cnn' and sysargv3 == 'partial':
+        pass
+    elif sysargv2 == 'lstm' and sysargv3 == 'shared':
+        pass
+    elif sysargv2 == 'lstm' and sysargv3 == 'partial':
+        pass
     else:
         raise ValueError
-elif sysargv2 == 'ablation':
-    if sysargv1 == 'sem_matrix':
-        model, entity_model, concept_model = cnn.build_model_shared_encoder_xDense(config,tr_data,vocabulary,pretrained,decision_layer=True)
-    elif sysargv1 == 'cosine_sim':
-        model, entity_model, concept_model = cnn.build_model_shared_encoder_dot_xDense(config,tr_data,vocabulary,pretrained,decision_layer=False)
+elif sysargv1 == 'cosine_sim':
+    if sysargv2 == 'cnn' and sysargv3 == 'shared':
+        model, entity_model, concept_model = cnn.build_model_shared_encoder_dot(config,tr_data,vocabulary,pretrained)
+    elif sysargv2 == 'cnn' and sysargv3 == 'partial':
+        pass
+    elif sysargv2 == 'lstm' and sysargv3 == 'shared':
+        pass
+    elif sysargv2 == 'lstm' and sysargv3 == 'partial':
+        pass
     else:
         raise ValueError
 else:
     raise ValueError
 
-dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
-hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[dev_eval_function])
 
-logger.info('Pretraining with synonym pairs finished. Continue training with real data.')
+dev_eval_function = EarlyStoppingRankingAccuracyGenerator(config, concept, positives_dev_truncated, vocabulary, entity_model, concept_model, model, real_val_data)
+
+if pretraining:
+    hist = model.fit(tr_data.x, tr_data.y, epochs=100, batch_size=100,callbacks=[dev_eval_function])
+    logger.info('Pretraining with synonym pairs finished. Continue training with real data.')
+    del tr_data
 
 positives_training, positives_dev, positives_dev_truncated = pickle.load(open(os.path.join(directory, 'gitig_positive_indices.pickle'),'rb'))
 positives_training = prepare_positives(positives_training,nltk.word_tokenize,vocabulary)
