@@ -6,23 +6,26 @@ Test hyperparameters:
     4. cnn_activation ['cnn']['activation']: tanh, relu
 fifth argv: 'sem_matrix', 'cosine_sim'
 sixth argv: machine, either 'evex' or 'nlpgpu1'
-optional seventh argument: False (no pretraining), default with pre-training
+seventh argument: False (no pretraining), True (with pre-training)
+optional eighth argument: negative count
 '''
 
 import sys
 assert sys.argv[5] == 'cosine_sim' or sys.argv[5] == 'sem_matrix'
-assert sys.argv[6] == 'evex' or sys.argv[6] == 'nlpgpu1' sys.argv[6] == 'taito'
+assert sys.argv[6] == 'evex' or sys.argv[6] == 'nlpgpu1' or sys.argv[6] == 'taito'
+assert sys.argv[7] == 'True' or sys.argv[7] == 'False'
 sysargv1 = sys.argv[1]
 sysargv2 = sys.argv[2]
 sysargv3 = sys.argv[3]
 sysargv4 = sys.argv[4]
 sysargv5 = sys.argv[5]
-try:
-    sys.argv[7]
+if sys.argv[7] == 'False':
     pretraining = False
     config['training']['epoch'] = '200'
-except IndexError:
+elif sys.argv[7] == 'True':
     pretraining = True
+else:
+    raise ValueError
 
 import random
 random.seed(1)
@@ -72,6 +75,10 @@ elif sys.argv[6] == 'taito':
     config['model']['path_model_whole'] = 'normalization/model_' + TIME + '.h5'
 else:
     raise ValueError('Unknown machine.')
+try:
+    config['sample']['neg_count'] = sys.argv[8]
+except IndexError:
+    pass
 config['cnn']['dropout'] = sysargv1
 config['cnn']['filters'] = sysargv2
 config['cnn']['kernel_size'] = sysargv3
