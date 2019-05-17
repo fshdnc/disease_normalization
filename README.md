@@ -12,3 +12,8 @@ expt: experiments reported in thesis, the scripts work in /src <br/>
 scripts: model evaluation, pretraining, test architecture, the scripts work in /src <br/>
 unimplemented: old code or not fully implemented code, the scripts work in /src
 
+### Files <br/>
+run*: run the normalization programme, under different setups. Recommend to use the scripts in `expt` instead.
+
+### Note <br/>
+The scripts may need cached processed data to run successfully. The code for processing those data are usually commented out in the scripts (or in other scripts). Occasionally the codes are not documented (when the data processing is straight forward. 
