@@ -10,6 +10,7 @@ gitig_*
 src/dis*
 vis
 src/fe_*
+recycling_bin.py
 
 # virtual environments
 venv*

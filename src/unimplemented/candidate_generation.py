@@ -7,6 +7,7 @@ config = cp.ConfigParser(strict=False)
 config.read('defaults.cfg')
 
 '''
+Taken from https://github.com/lfurrer/disease-normalization/tree/master/tzlink
 Things to be fixed
 1. skip-gram generation
 2. cutoff score for candidate generation

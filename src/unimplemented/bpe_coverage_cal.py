@@ -1,4 +1,6 @@
-'''load the mentions into a list first'''
+'''checks the coverage for bpe embeddings
+   load the mentions into a list first
+'''
 
 from subword_nmt.apply_bpe import BPE
 

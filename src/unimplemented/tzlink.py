@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+'''functions taken from https://github.com/lfurrer/disease-normalization/tree/master/tzlink'''
+
 import re
 
 def tzlink_tokenizer(string):
