@@ -1,10 +1,11 @@
 # disease_normalization
 Disease mention normalization project
 
+### Data <br/>
 Data set: NCBI disease corpus <br/>
 Controlled vocabulary: MEDIC
 
-###Folders: <br/>
+### Folders <br/>
     analysis: contains analysis of experimental results <br/>
     baseline: baselines, the scripts need to be moved to /src to work <br/>
     expt: experiments reported in thesis, the scripts work in /src <br/>
