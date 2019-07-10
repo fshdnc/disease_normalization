@@ -1,4 +1,5 @@
 '''
+Thesis: Section 7.4 Similarity measures
 Test different architectures:
     shared encoder with (semantic similarity matrix / cosine similarity)
 

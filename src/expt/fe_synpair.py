@@ -1,4 +1,5 @@
 '''
+Thesis: Section 7.3 Pre-training (synonym pair)
 Four architectures,separate/shared encoder x dense/no dense layer
 first argv: 'separate', 'shared'
 second argv: 'full', 'ablation'

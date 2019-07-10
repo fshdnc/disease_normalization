@@ -1,4 +1,5 @@
 '''
+Thesis: Section 7.5 Hyperparameter optimization
 Test hyperparameters:
     1. dropout ['cnn']['dropout']: 0, 0.1, 0.25, 0.5, 0,75
     2. filters ['cnn']['filters']: 10, 25, 50, 100, 150

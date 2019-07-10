@@ -6,8 +6,6 @@ import logging.config
 import configparser as cp
 import args
 
-import pickle
-
 import vectorizer
 import load
 import sample

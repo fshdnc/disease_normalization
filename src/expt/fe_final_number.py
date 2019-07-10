@@ -1,4 +1,7 @@
 '''
+Thesis: 7.6 Evaluation on held-out data
+N.B. This code requires saved model to run
+
 Evaluate given model on
 1. sampled development set
 2. development set
@@ -43,6 +46,7 @@ except NameError:
     directory = '/home/lhchan/disease_normalization/src'
     config.read(os.path.join(directory, 'fe.cfg'))
 
+# saved model, change model_name to your own path
 model_name = '/home/lhchan/disease_normalization/gitig/model_whole_'+sys.argv[1]+'.h5'
 #################################################
 config['embedding']['emb_file'] = os.path.join(directory, '../../disease_normalization/data/pubmed2018_w2v_200D/pubmed2018_w2v_200D.bin')

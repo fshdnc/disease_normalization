@@ -1,4 +1,5 @@
 '''
+Thesis: 7.2 Selection of embeddings
 Shared encoder, generator
 test embedding by pre-training
 give 50, 200, 400 for the embedding used as the first argument
@@ -151,9 +152,11 @@ def generate_synonym_pairs(dictionary, order=None):
     return synonym_pairs
 
 # validation set
-[real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
+# [real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data.pickle'),'rb'))
+# real_val_data.x = None
+[real_val_data,concept_order] = pickle.load(open(os.path.join(directory, 'gitig_real_val_data_light.pickle'),'rb'))
 real_val_data.y=np.array(real_val_data.y)
-real_val_data.x = None
+
 
 concept = concept_obj(config,dictionary,order=concept_order)
 
