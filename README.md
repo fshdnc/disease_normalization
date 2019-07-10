@@ -32,4 +32,6 @@ For these functions to run correctly, please create a folder `gitig`, and `log` 
 
 ### Note <br/>
 The scripts may need cached processed data to run successfully. The code for processing those data are usually commented out in the scripts (or in other scripts). Occasionally the codes are not documented (when the data processing is straight forward). <br>
-Some of the cached processed (those used in the scripts in `expt`) can be found inside `pickled`. Move the relevant ones to `src` before running the script. Decompress the file when appropriate.
+Some of the cached processed (those used in the scripts in `expt`) can be found inside `pickled`. Move the relevant ones to `src` before running the script. Decompress the file when appropriate.<br>
+<br>
+Known bug: the callback used in the scripts in `expt` does not save the best model.
